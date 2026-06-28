@@ -29,6 +29,7 @@ body {
 
 button,
 input,
+select,
 a {
   font: inherit;
 }
@@ -166,6 +167,27 @@ h2 {
 .panel {
   min-width: 0;
   padding: 16px;
+}
+
+.create-client-panel {
+  margin-bottom: 12px;
+}
+
+.create-client-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 0.6fr) auto;
+  gap: 10px;
+}
+
+.create-client-form input,
+.create-client-form select {
+  min-width: 0;
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 12px;
+  color: var(--ink);
+  background: #ffffff;
 }
 
 .panel-title {
@@ -478,6 +500,7 @@ td:first-child {
   .workspace,
   .bottom-grid,
   .handover-layout,
+  .create-client-form,
   .state-grid {
     grid-template-columns: 1fr;
   }
