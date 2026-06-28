@@ -23,7 +23,20 @@ export async function POST(request: Request) {
       return fail("Unsupported client status", 400);
     }
 
-    const { data, error } = await getSupabaseAdmin()
+    const supabase = getSupabaseAdmin();
+    const { data: projectRows, error: projectError } = await supabase
+      .from("projects")
+      .select("project_id")
+      .eq("project_id", projectId)
+      .limit(1);
+
+    if (projectError) throw projectError;
+
+    if (!projectRows?.length) {
+      return fail("Project not found", 400);
+    }
+
+    const { data, error } = await supabase
       .from("client_brains")
       .insert({
         client_id: clientId,
