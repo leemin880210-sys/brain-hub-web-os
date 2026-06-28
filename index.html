@@ -264,7 +264,8 @@
     </main>
 
     <script>
-      const API_BASE = "https://your-brain-api-domain.com/api";
+      const EXTERNAL_BRAIN_API_BASE = "https://your-brain-api-domain.com/api";
+      const API_BASE = location.hostname.endsWith("github.io") ? EXTERNAL_BRAIN_API_BASE : "/api";
       const REFRESH_INTERVAL_MS = 15000;
 
       const state = {
@@ -407,7 +408,7 @@
       }
 
       function renderLoading() {
-        el("api-base").textContent = `API BASE: ${API_BASE}`;
+        el("api-base").textContent = `WEB API: ${API_BASE} -> ${EXTERNAL_BRAIN_API_BASE}`;
       }
 
       function selectedClient() {
@@ -422,7 +423,7 @@
         const tasks = state.taskQueue || [];
         const events = state.eventStream || [];
 
-        el("api-base").textContent = `API BASE: ${API_BASE}`;
+        el("api-base").textContent = `WEB API: ${API_BASE} -> ${EXTERNAL_BRAIN_API_BASE}`;
         el("project-count").textContent = String(state.projects.length);
         el("client-count").textContent = String(state.clients.length);
         el("task-count").textContent = String(tasks.length);

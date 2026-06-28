@@ -6,15 +6,15 @@ export const dynamic = "force-dynamic";
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    requireString(body.task_id, "task_id");
+    requireString(body.client_id, "client_id");
 
     return ok(
-      await externalBrainApi("/tasks/update", {
+      await externalBrainApi("/update_state", {
         method: "POST",
         body: JSON.stringify(body)
       })
     );
   } catch (error) {
-    return fail("Failed to update external task", 502, error);
+    return fail("Failed to update external state", 502, error);
   }
 }

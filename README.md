@@ -1,44 +1,34 @@
 # Brain Hub Web OS
 
-Cloud-Based Multi-Agent Brain Operating System for project, client brain, task queue, event stream, handover, and runtime execution workflows.
+Web(A) visual console for an external Brain API(B).
 
-This app stores operational data only in Supabase. The repository contains application source, SQL schema, and environment templates; it does not contain local client state, task queue, memory, or event history.
+No project, client, task, event, or state data is stored locally. The UI calls Web(A) API routes, and those routes proxy the external AI_MEMORY_SYSTEM API.
 
-## Stack
+## Environment
 
-- Next.js Web UI
-- Node.js REST API via Next.js route handlers
-- Supabase cloud database
-
-## Setup
-
-1. Create a Supabase project.
-2. Run `supabase/schema.sql` in the Supabase SQL editor.
-3. Copy `.env.example` to `.env.local` and fill in the Supabase values.
-4. Install dependencies and run the app.
-
-```bash
-npm install
-npm run dev
+```env
+BRAIN_API_BASE=https://your-brain-api-domain.com/api
+BRAIN_API_TOKEN=
+NEXT_PUBLIC_APP_URL=https://your-web-domain
 ```
 
-## Core URLs
+## Web(A) API Layer
 
-- Dashboard: `/`
-- Handover: `/handover?client_id=A001`
-- Runtime step: `POST /api/runtime/step`
+- `GET /api/projects` -> B `/projects`
+- `GET /api/clients` -> B `/clients`
+- `GET /api/client` -> B `/clients` or B `/client/:client_id`
+- `GET /api/client/:client_id` -> B `/client/:client_id`
+- `GET /api/tasks?client_id=A001` -> B `/tasks?client_id=A001`
+- `GET /api/events` -> B `/events`
+- `POST /api/handover` -> B `/handover`
 
-## Cloud Runtime Contract
+## UI Handover Flow
 
-The source of truth is Supabase:
-
-- `projects`
-- `client_brains`
-- `task_queue`
-- `event_stream`
-
-Runtime loop:
+Clicking a client calls:
 
 ```text
-READ STATE -> GET TASK -> EXECUTE -> WRITE EVENT -> UPDATE STATE -> REPEAT
+GET /api/client/:id
+GET /api/tasks?client_id=:id
 ```
+
+The UI displays state, task queue, event stream, and a copyable AI handover context.

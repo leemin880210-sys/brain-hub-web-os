@@ -23,7 +23,7 @@ ROLE:
 AI_EXECUTION_LAYER
 
 SOURCE_OF_TRUTH:
-Supabase cloud database through Brain Hub Web OS REST API.
+External AI_MEMORY_SYSTEM API through Brain Hub Web OS REST API.
 
 CLIENT:
 client_id = ${input.client.client_id}

@@ -19,9 +19,19 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import type { ClientBrain, EventStreamItem, OverviewPayload, Project, TaskQueueItem } from "@/lib/types";
 
-type RuntimeResponse = {
-  status: string;
-  phase: string;
+type ExecuteResponse = {
+  result: string;
+};
+
+type ClientStatePack = {
+  client_state?: ClientBrain;
+  client?: ClientBrain;
+  state?: ClientBrain;
+  task_queue?: TaskQueueItem[];
+  tasks?: TaskQueueItem[];
+  event_stream?: EventStreamItem[];
+  event_history?: EventStreamItem[];
+  events?: EventStreamItem[];
 };
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
@@ -41,6 +51,18 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   return payload as T;
 }
 
+function asArray<T>(payload: unknown, keys: string[]): T[] {
+  if (Array.isArray(payload)) return payload as T[];
+  if (payload && typeof payload === "object") {
+    const record = payload as Record<string, unknown>;
+    for (const key of keys) {
+      if (Array.isArray(record[key])) return record[key] as T[];
+    }
+    if (Array.isArray(record.data)) return record.data as T[];
+  }
+  return [];
+}
+
 function formatDate(value?: string) {
   if (!value) return "-";
   return new Intl.DateTimeFormat(undefined, {
@@ -58,15 +80,7 @@ function statusClass(status: string) {
   return "status mode";
 }
 
-function Metric({
-  icon,
-  label,
-  value
-}: {
-  icon: ReactNode;
-  label: string;
-  value: number;
-}) {
+function Metric({ icon, label, value }: { icon: ReactNode; label: string; value: number }) {
   return (
     <article className="metric">
       <div className="metric-icon">{icon}</div>
@@ -85,12 +99,29 @@ export function DashboardClient() {
     tasks: [],
     recent_events: []
   });
-  const [selectedClientId, setSelectedClientId] = useState<string>("");
+  const [statePack, setStatePack] = useState<ClientStatePack | null>(null);
+  const [selectedClientId, setSelectedClientId] = useState("");
   const [taskAction, setTaskAction] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [origin, setOrigin] = useState("");
+
+  const loadClientContext = useCallback(async (clientId: string) => {
+    const [clientPayload, tasksPayload] = await Promise.all([
+      fetchJson<ClientStatePack>(`/api/client/${encodeURIComponent(clientId)}`),
+      fetchJson<unknown>(`/api/tasks?client_id=${encodeURIComponent(clientId)}`)
+    ]);
+
+    setStatePack({
+      ...clientPayload,
+      task_queue:
+        clientPayload.task_queue?.length || clientPayload.tasks?.length
+          ? clientPayload.task_queue ?? clientPayload.tasks
+          : asArray<TaskQueueItem>(tasksPayload, ["task_queue", "tasks"]),
+      event_stream: clientPayload.event_stream ?? clientPayload.event_history ?? clientPayload.events ?? []
+    });
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -98,13 +129,17 @@ export function DashboardClient() {
     try {
       const overview = await fetchJson<OverviewPayload>("/api/overview");
       setData(overview);
-      setSelectedClientId((current) => current || overview.clients[0]?.client_id || "");
+      const nextClientId = selectedClientId || overview.clients[0]?.client_id || "";
+      setSelectedClientId(nextClientId);
+      if (nextClientId) {
+        await loadClientContext(nextClientId);
+      }
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "Cloud overview unavailable");
+      setNotice(error instanceof Error ? error.message : "External brain API unavailable");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [loadClientContext, selectedClientId]);
 
   useEffect(() => {
     setOrigin(window.location.origin);
@@ -112,20 +147,32 @@ export function DashboardClient() {
   }, [load]);
 
   const selectedClient = useMemo(
-    () => data.clients.find((client) => client.client_id === selectedClientId) ?? data.clients[0],
-    [data.clients, selectedClientId]
+    () =>
+      statePack?.client_state ??
+      statePack?.client ??
+      statePack?.state ??
+      data.clients.find((client) => client.client_id === selectedClientId) ??
+      data.clients[0],
+    [data.clients, selectedClientId, statePack]
   );
   const selectedProject = useMemo(
     () => data.projects.find((project) => project.project_id === selectedClient?.project_id),
     [data.projects, selectedClient?.project_id]
   );
   const clientTasks = useMemo(
-    () => data.tasks.filter((task) => task.client_id === selectedClient?.client_id),
-    [data.tasks, selectedClient?.client_id]
+    () =>
+      statePack?.task_queue ??
+      statePack?.tasks ??
+      data.tasks.filter((task) => task.client_id === selectedClient?.client_id),
+    [data.tasks, selectedClient?.client_id, statePack]
   );
   const clientEvents = useMemo(
-    () => data.recent_events.filter((event) => event.client_id === selectedClient?.client_id),
-    [data.recent_events, selectedClient?.client_id]
+    () =>
+      statePack?.event_stream ??
+      statePack?.event_history ??
+      statePack?.events ??
+      data.recent_events.filter((event) => event.client_id === selectedClient?.client_id),
+    [data.recent_events, selectedClient?.client_id, statePack]
   );
 
   const pendingCount = data.tasks.filter((task) => task.status === "pending").length;
@@ -149,7 +196,7 @@ export function DashboardClient() {
         })
       });
       setTaskAction("");
-      setNotice("Task queued in Supabase");
+      setNotice("任务已写入外脑 API");
       await load();
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Failed to create task");
@@ -158,40 +205,68 @@ export function DashboardClient() {
     }
   }
 
-  async function runCycle() {
+  async function executeTask() {
     if (!selectedClient) return;
 
     setBusy(true);
     setNotice("");
     try {
-      const result = await fetchJson<RuntimeResponse>("/api/runtime/step", {
+      const action = selectedClient.current_task || clientTasks.find((task) => task.status === "pending")?.action;
+      const result = await fetchJson<ExecuteResponse>("/api/execute", {
         method: "POST",
         body: JSON.stringify({
           client_id: selectedClient.client_id,
-          auto_complete: true
+          task: {
+            action: action || "collect_client_info"
+          }
         })
       });
-      setNotice(`Runtime ${result.status} at ${result.phase}`);
+      setNotice(`Execution ${result.result}`);
       await load();
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "Runtime step failed");
+      setNotice(error instanceof Error ? error.message : "Execution failed");
     } finally {
       setBusy(false);
     }
   }
 
-  async function copyHandoverLink() {
-    if (!handoverLink) return;
-    await navigator.clipboard.writeText(handoverLink);
-    setNotice("Handover link copied");
+  async function copyHandoverContext() {
+    if (!selectedClient) return;
+
+    const handoverText = JSON.stringify(
+      {
+        client_state: selectedClient,
+        task_queue: clientTasks,
+        event_stream: clientEvents
+      },
+      null,
+      2
+    );
+
+    await navigator.clipboard.writeText(handoverText);
+    setNotice("AI handover context copied");
+  }
+
+  async function selectClient(clientId: string) {
+    setSelectedClientId(clientId);
+    setBusy(true);
+    setNotice("");
+    try {
+      await loadClientContext(clientId);
+      setNotice(`Loaded client ${clientId} state, tasks, and events`);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Failed to load client brain");
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
     <main className="shell">
       <header className="topbar">
         <div>
-          <p className="eyebrow">Cloud Runtime</p>
-          <h1>Brain Hub Web OS</h1>
+          <p className="eyebrow">External Brain API</p>
+          <h1>Brain Hub External Brain Console</h1>
         </div>
         <button className="icon-button" type="button" onClick={load} disabled={loading || busy} aria-label="Refresh">
           <RefreshCw size={18} />
@@ -223,7 +298,7 @@ export function DashboardClient() {
                 <span className="status mode">{project.mode}</span>
               </div>
             ))}
-            {!loading && data.projects.length === 0 ? <p className="empty">No cloud projects</p> : null}
+            {!loading && data.projects.length === 0 ? <p className="empty">No projects</p> : null}
           </div>
         </section>
 
@@ -238,7 +313,7 @@ export function DashboardClient() {
                 className={client.client_id === selectedClient?.client_id ? "client-row active" : "client-row"}
                 key={client.client_id}
                 type="button"
-                onClick={() => setSelectedClientId(client.client_id)}
+                onClick={() => void selectClient(client.client_id)}
               >
                 <div>
                   <strong>{client.name}</strong>
@@ -250,15 +325,15 @@ export function DashboardClient() {
                 </div>
               </button>
             ))}
-            {!loading && data.clients.length === 0 ? <p className="empty">No cloud clients</p> : null}
+            {!loading && data.clients.length === 0 ? <p className="empty">No clients</p> : null}
           </div>
         </section>
 
         <section className="panel detail-panel">
           <div className="panel-title split">
             <div>
-              <p className="eyebrow">Selected Brain</p>
-              <h2>{selectedClient?.name ?? "No client"}</h2>
+              <p className="eyebrow">Selected Client Brain</p>
+              <h2>{selectedClient?.name ?? "No client selected"}</h2>
             </div>
             {selectedClient ? <span className="status mode">{selectedClient.status}</span> : null}
           </div>
@@ -279,13 +354,13 @@ export function DashboardClient() {
           </div>
 
           <div className="actions">
-            <button type="button" className="primary-button" onClick={runCycle} disabled={!selectedClient || busy}>
+            <button type="button" className="primary-button" onClick={executeTask} disabled={!selectedClient || busy}>
               <Play size={17} />
-              Run Cycle
+              Execute
             </button>
-            <button type="button" className="secondary-button" onClick={copyHandoverLink} disabled={!selectedClient}>
+            <button type="button" className="secondary-button" onClick={copyHandoverContext} disabled={!selectedClient}>
               <Copy size={17} />
-              Copy Link
+              Copy Handover
             </button>
             <a className="secondary-button" href={handoverLink || "#"}>
               <ExternalLink size={17} />
@@ -322,7 +397,7 @@ export function DashboardClient() {
             <table>
               <thead>
                 <tr>
-                  <th>Action</th>
+                  <th>Task</th>
                   <th>Status</th>
                   <th>Created</th>
                 </tr>
@@ -339,7 +414,7 @@ export function DashboardClient() {
                 ))}
               </tbody>
             </table>
-            {!loading && clientTasks.length === 0 ? <p className="empty">No tasks for this client</p> : null}
+            {!loading && clientTasks.length === 0 ? <p className="empty">No tasks</p> : null}
           </div>
         </section>
 
@@ -358,7 +433,7 @@ export function DashboardClient() {
                 <code>{JSON.stringify(event.output)}</code>
               </div>
             ))}
-            {!loading && clientEvents.length === 0 ? <p className="empty">No events for this client</p> : null}
+            {!loading && clientEvents.length === 0 ? <p className="empty">No events</p> : null}
           </div>
         </section>
       </section>

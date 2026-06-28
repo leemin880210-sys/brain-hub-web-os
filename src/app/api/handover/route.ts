@@ -1,4 +1,4 @@
-import { buildHandoverPayload } from "@/lib/brain-os";
+import { externalBrainApi } from "@/lib/external-brain-api";
 import { fail, ok, requireString } from "@/lib/http";
 
 export const dynamic = "force-dynamic";
@@ -12,9 +12,9 @@ export async function GET(request: Request) {
       return fail("client_id is required", 400);
     }
 
-    return ok(await buildHandoverPayload(clientId, request));
+    return ok(await externalBrainApi(`/handover?client_id=${encodeURIComponent(clientId)}`));
   } catch (error) {
-    return fail("Failed to build handover payload", 500, error);
+    return fail("Failed to load external handover payload", 502, error);
   }
 }
 
@@ -23,8 +23,13 @@ export async function POST(request: Request) {
     const body = await request.json();
     const clientId = requireString(body.client_id, "client_id");
 
-    return ok(await buildHandoverPayload(clientId, request));
+    return ok(
+      await externalBrainApi("/handover", {
+        method: "POST",
+        body: JSON.stringify({ ...body, client_id: clientId })
+      })
+    );
   } catch (error) {
-    return fail("Failed to build handover payload", 500, error);
+    return fail("Failed to request external handover", 502, error);
   }
 }

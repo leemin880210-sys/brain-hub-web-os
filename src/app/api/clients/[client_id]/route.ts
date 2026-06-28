@@ -1,4 +1,4 @@
-import { loadClientStatePack } from "@/lib/brain-os";
+import { externalBrainApi } from "@/lib/external-brain-api";
 import { fail, ok } from "@/lib/http";
 
 export const dynamic = "force-dynamic";
@@ -12,10 +12,9 @@ type Params = {
 export async function GET(_request: Request, context: Params) {
   try {
     const { client_id } = await context.params;
-    const statePack = await loadClientStatePack(client_id);
 
-    return ok(statePack);
+    return ok(await externalBrainApi(`/client/${encodeURIComponent(client_id)}`));
   } catch (error) {
-    return fail("Failed to load client state pack", 404, error);
+    return fail("Failed to load external client state", 502, error);
   }
 }

@@ -1,58 +1,29 @@
-import { fail, ok, requireString } from "@/lib/http";
-import { getSupabaseAdmin } from "@/lib/supabase";
-import type { TaskStatus } from "@/lib/types";
+import { externalBrainApi } from "@/lib/external-brain-api";
+import { fail, ok } from "@/lib/http";
 
 export const dynamic = "force-dynamic";
-
-const taskStatuses = new Set<TaskStatus>(["pending", "running", "done"]);
 
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const clientId = searchParams.get("client_id");
-    const status = searchParams.get("status");
+    const query = searchParams.toString();
 
-    let query = getSupabaseAdmin().from("task_queue").select("*").order("created_at", { ascending: true });
-
-    if (clientId) {
-      query = query.eq("client_id", clientId);
-    }
-
-    if (status) {
-      if (!taskStatuses.has(status as TaskStatus)) {
-        return fail("Unsupported task status", 400);
-      }
-      query = query.eq("status", status);
-    }
-
-    const { data, error } = await query;
-
-    if (error) throw error;
-    return ok({ tasks: data ?? [] });
+    return ok(await externalBrainApi(`/tasks${query ? `?${query}` : ""}`));
   } catch (error) {
-    return fail("Failed to load tasks", 500, error);
+    return fail("Failed to load external tasks", 502, error);
   }
 }
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
-    const client_id = requireString(body.client_id, "client_id");
-    const action = requireString(body.action, "action");
-
-    const { data, error } = await getSupabaseAdmin()
-      .from("task_queue")
-      .insert({
-        client_id,
-        action,
-        status: "pending"
-      })
-      .select("*")
-      .single();
-
-    if (error) throw error;
-    return ok({ task: data }, { status: 201 });
+    return ok(
+      await externalBrainApi("/tasks", {
+        method: "POST",
+        body: JSON.stringify(await request.json())
+      }),
+      { status: 201 }
+    );
   } catch (error) {
-    return fail("Failed to create task", 400, error);
+    return fail("Failed to write external task", 502, error);
   }
 }

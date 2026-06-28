@@ -1,7 +1,8 @@
 export type ProjectMode = "operation_system";
 export type ClientStatus = "account_ops" | "operation_ops" | "evolution_ops";
-export type TaskStatus = "pending" | "running" | "done";
-export type EventType = "execution" | "chat" | "update";
+export type TaskStatus = "pending" | "running" | "done" | "blocked" | "failed";
+export type EventType = "execution" | "chat" | "update" | "task_execution" | "state_update";
+export type ExecutionResult = "success" | "failed" | "blocked";
 
 export type Project = {
   project_id: string;
