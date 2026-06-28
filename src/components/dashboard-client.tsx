@@ -34,10 +34,7 @@ type ClientStatePack = {
   events?: EventStreamItem[];
 };
 
-const API_BASE = (process.env.NEXT_PUBLIC_BRAIN_OS_API_BASE || "https://leemin880210-sys.vercel.app/api").replace(
-  /\/$/,
-  ""
-);
+const API_BASE = "https://leemin880210-sys.vercel.app/api";
 
 function apiUrl(url: string) {
   if (url.startsWith("http")) return url;
