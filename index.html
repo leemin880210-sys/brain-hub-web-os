@@ -2,6 +2,17 @@
 <html lang="zh-CN">
   <head>
     <meta charset="utf-8" />
+    <script>
+      if (location.hostname.endsWith("github.io")) {
+        const appBase = "https://leemin880210-sys.vercel.app";
+        const pagesBase = "/brain-hub-web-os";
+        const nextPath = location.pathname.startsWith(pagesBase)
+          ? location.pathname.slice(pagesBase.length) || "/"
+          : location.pathname;
+
+        location.replace(`${appBase}${nextPath}${location.search}${location.hash}`);
+      }
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Brain Hub 外脑控制台</title>
     <style>
