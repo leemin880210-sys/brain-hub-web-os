@@ -1,7 +1,27 @@
 import { NextResponse } from "next/server";
 
+export const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+  "Access-Control-Max-Age": "86400"
+};
+
+function withCors(init?: ResponseInit): ResponseInit {
+  const headers = new Headers(init?.headers);
+
+  for (const [key, value] of Object.entries(corsHeaders)) {
+    headers.set(key, value);
+  }
+
+  return {
+    ...init,
+    headers
+  };
+}
+
 export function ok<T>(data: T, init?: ResponseInit) {
-  return NextResponse.json(data, init);
+  return NextResponse.json(data, withCors(init));
 }
 
 export function fail(message: string, status = 500, details?: unknown) {
@@ -12,8 +32,15 @@ export function fail(message: string, status = 500, details?: unknown) {
       error: message,
       details: detailMessage
     },
-    { status }
+    withCors({ status })
   );
+}
+
+export function preflight() {
+  return new NextResponse(null, {
+    status: 204,
+    headers: corsHeaders
+  });
 }
 
 export function requireString(value: unknown, field: string) {
