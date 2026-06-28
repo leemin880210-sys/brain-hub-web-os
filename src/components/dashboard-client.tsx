@@ -44,6 +44,10 @@ type ExecuteResponse = {
   result: string;
 };
 
+type CreateClientResponse = {
+  client: ClientBrain;
+};
+
 type ClientStatePack = {
   client_state?: ClientBrain;
   client?: ClientBrain;
@@ -66,6 +70,18 @@ type ApiStatus = {
 };
 
 const API_BASE = "https://leemin880210-sys.vercel.app/api";
+
+const statusText: Record<string, string> = {
+  idle: "空闲",
+  pending: "待处理",
+  running: "执行中",
+  done: "已完成",
+  blocked: "已阻塞",
+  failed: "失败",
+  account_ops: "采集模式",
+  operation_ops: "执行模式",
+  evolution_ops: "优化模式"
+};
 
 function apiUrl(url: string) {
   if (url.startsWith("http")) return url;
@@ -97,11 +113,11 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<ApiEnvelop
   });
   const payload = (await response.json().catch(() => ({
     success: false,
-    error: "Response was not JSON"
+    error: "接口返回不是 JSON"
   }))) as ApiEnvelope<T>;
 
   if (!response.ok || payload.success !== true) {
-    throw new Error(errorMessage(payload, `API request failed: ${url}`));
+    throw new Error(errorMessage(payload, `接口请求失败：${url}`));
   }
 
   return payload;
@@ -121,12 +137,17 @@ function asArray<T>(payload: unknown, keys: string[]): T[] {
 
 function formatDate(value?: string) {
   if (!value) return "-";
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
+  return new Intl.DateTimeFormat("zh-CN", {
+    month: "2-digit",
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit"
   }).format(new Date(value));
+}
+
+function displayStatus(value?: string) {
+  if (!value) return "-";
+  return statusText[value] ?? value;
 }
 
 function statusClass(status: string) {
@@ -154,7 +175,7 @@ function StatusBadge({ label, ok, detail }: { label: string; ok: boolean; detail
       <div className="metric-icon">{ok ? <CheckCircle2 size={20} /> : <AlertCircle size={20} />}</div>
       <div>
         <span>{label}</span>
-        <strong>{ok ? "OK" : "FAILED"}</strong>
+        <strong>{ok ? "正常" : "异常"}</strong>
         <small>{detail}</small>
       </div>
     </article>
@@ -184,6 +205,8 @@ export function DashboardClient() {
   });
   const [statePack, setStatePack] = useState<ClientStatePack | null>(null);
   const [selectedClientId, setSelectedClientId] = useState("");
+  const [clientName, setClientName] = useState("");
+  const [clientProjectId, setClientProjectId] = useState("");
   const [taskAction, setTaskAction] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -210,7 +233,7 @@ export function DashboardClient() {
         apiConnected: false,
         supabaseConnected: false,
         dataReal: false,
-        error: error instanceof Error ? error.message : "Health check failed"
+        error: error instanceof Error ? error.message : "外脑连接中..."
       }));
       throw error;
     }
@@ -254,6 +277,7 @@ export function DashboardClient() {
         recent_events: asArray<EventStreamItem>(eventsPayload, ["events", "event_stream", "event_history"])
       };
       setData(overview);
+      setClientProjectId((current) => current || overview.projects[0]?.project_id || "");
 
       const nextClientId = selectedClientId || overview.clients[0]?.client_id || "";
       setSelectedClientId(nextClientId);
@@ -262,9 +286,8 @@ export function DashboardClient() {
       } else {
         setStatePack(null);
       }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "API request failed";
-      setNotice(message);
+    } catch {
+      setNotice("外脑连接中...");
     } finally {
       setLoading(false);
     }
@@ -309,6 +332,36 @@ export function DashboardClient() {
   const handoverLink = selectedClient
     ? `${origin}/handover?client_id=${encodeURIComponent(selectedClient.client_id)}`
     : "";
+  const createProjectId = clientProjectId || data.projects[0]?.project_id || "";
+
+  async function createClient(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const nextClientName = clientName.trim();
+
+    if (!nextClientName || !createProjectId) {
+      setNotice("请填写副脑名称并选择所属项目");
+      return;
+    }
+
+    setBusy(true);
+    setNotice("外脑连接中...");
+    try {
+      await fetchJson<CreateClientResponse>("/api/client/create", {
+        method: "POST",
+        body: JSON.stringify({
+          client_name: nextClientName,
+          project_id: createProjectId
+        })
+      });
+      setClientName("");
+      setNotice("副脑已创建");
+      await load();
+    } catch {
+      setNotice("外脑连接中...");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function createTask(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -325,10 +378,10 @@ export function DashboardClient() {
         })
       });
       setTaskAction("");
-      setNotice("Task written to Supabase");
+      setNotice("任务已写入云端");
       await load();
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "Failed to create task");
+      setNotice(error instanceof Error ? error.message : "任务创建失败");
     } finally {
       setBusy(false);
     }
@@ -350,10 +403,10 @@ export function DashboardClient() {
           }
         })
       });
-      setNotice(`Execution result: ${result.result}`);
+      setNotice(`执行结果：${result.result}`);
       await load();
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "Execution failed");
+      setNotice(error instanceof Error ? error.message : "执行失败");
     } finally {
       setBusy(false);
     }
@@ -373,9 +426,9 @@ export function DashboardClient() {
         typeof handover.handover_text === "string" ? handover.handover_text : JSON.stringify(handover, null, 2);
 
       await navigator.clipboard.writeText(handoverText);
-      setNotice("AI handover context copied");
+      setNotice("接管上下文已复制");
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "Handover failed");
+      setNotice(error instanceof Error ? error.message : "接管失败");
     } finally {
       setBusy(false);
     }
@@ -387,9 +440,9 @@ export function DashboardClient() {
     setNotice("");
     try {
       await loadClientContext(clientId);
-      setNotice(`Loaded client ${clientId}`);
+      setNotice(`已加载子脑：${clientId}`);
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "Failed to load client");
+      setNotice(error instanceof Error ? error.message : "子脑加载失败");
     } finally {
       setBusy(false);
     }
@@ -399,51 +452,82 @@ export function DashboardClient() {
     <main className="shell">
       <header className="topbar">
         <div>
-          <p className="eyebrow">Real API Validation</p>
-          <h1>Brain Hub API Console</h1>
+          <p className="eyebrow">外脑 API 实时校验</p>
+          <h1>Brain Hub 外脑控制台</h1>
         </div>
-        <button className="icon-button" type="button" onClick={load} disabled={loading || busy} aria-label="Refresh">
+        <button className="icon-button" type="button" onClick={load} disabled={loading || busy} aria-label="刷新">
           <RefreshCw size={18} />
         </button>
       </header>
 
       {notice ? <div className={apiStatus.apiConnected ? "notice" : "notice error"}>{notice}</div> : null}
 
-      <section className="metric-grid" aria-label="API status">
+      <section className="metric-grid" aria-label="API 状态">
         <StatusBadge
-          label="Backend API"
+          label="后端 API"
           ok={apiStatus.apiConnected}
-          detail={apiStatus.loading ? "checking..." : apiStatus.error || "health endpoint returned success"}
+          detail={apiStatus.loading ? "连接中..." : apiStatus.error || "健康检查通过"}
         />
         <StatusBadge
           label="Supabase"
           ok={apiStatus.supabaseConnected}
-          detail={apiStatus.loading ? "checking..." : apiStatus.error || "live database query succeeded"}
+          detail={apiStatus.loading ? "连接中..." : apiStatus.error || "云数据库查询成功"}
         />
         <StatusBadge
-          label="Real Data"
+          label="真实数据"
           ok={apiStatus.dataReal}
           detail={
             apiStatus.loading
-              ? "checking..."
-              : `source=${apiStatus.source}; projects=${apiStatus.counts.projects}; clients=${apiStatus.counts.clients}; tasks=${apiStatus.counts.tasks}`
+              ? "连接中..."
+              : `来源=${apiStatus.source}；项目=${apiStatus.counts.projects}；子脑=${apiStatus.counts.clients}；任务=${apiStatus.counts.tasks}`
           }
         />
-        <Metric icon={<Server size={20} />} label="Events" value={apiStatus.counts.events} />
+        <Metric icon={<Server size={20} />} label="事件数" value={apiStatus.counts.events} />
       </section>
 
-      <section className="metric-grid" aria-label="Overview">
-        <Metric icon={<Layers3 size={20} />} label="Projects" value={data.projects.length} />
-        <Metric icon={<Users2 size={20} />} label="Clients" value={data.clients.length} />
-        <Metric icon={<Clock3 size={20} />} label="Pending" value={pendingCount} />
-        <Metric icon={<Activity size={20} />} label="Running" value={runningCount} />
+      <section className="metric-grid" aria-label="总览">
+        <Metric icon={<Layers3 size={20} />} label="项目" value={data.projects.length} />
+        <Metric icon={<Users2 size={20} />} label="子脑" value={data.clients.length} />
+        <Metric icon={<Clock3 size={20} />} label="待处理" value={pendingCount} />
+        <Metric icon={<Activity size={20} />} label="执行中" value={runningCount} />
+      </section>
+
+      <section className="panel create-client-panel">
+        <div className="panel-title">
+          <Users2 size={18} />
+          <h2>新建副脑</h2>
+        </div>
+        <form className="create-client-form" onSubmit={createClient}>
+          <input
+            aria-label="副脑名称"
+            value={clientName}
+            onChange={(event) => setClientName(event.target.value)}
+            placeholder="副脑名称"
+          />
+          <select
+            aria-label="所属项目"
+            value={createProjectId}
+            onChange={(event) => setClientProjectId(event.target.value)}
+            disabled={!data.projects.length}
+          >
+            {data.projects.map((project) => (
+              <option key={project.project_id} value={project.project_id}>
+                {project.name || project.project_id}
+              </option>
+            ))}
+          </select>
+          <button type="submit" className="primary-button" disabled={busy || !clientName.trim() || !createProjectId}>
+            <Plus size={18} />
+            新建副脑
+          </button>
+        </form>
       </section>
 
       <section className="workspace">
         <section className="panel">
           <div className="panel-title">
             <Database size={18} />
-            <h2>Projects</h2>
+            <h2>项目列表</h2>
           </div>
           <div className="list">
             {data.projects.map((project: Project) => (
@@ -455,14 +539,14 @@ export function DashboardClient() {
                 <span className="status mode">{project.mode}</span>
               </div>
             ))}
-            {!loading && data.projects.length === 0 ? <p className="empty">No projects returned by API</p> : null}
+            {!loading && data.projects.length === 0 ? <p className="empty">暂无项目</p> : null}
           </div>
         </section>
 
         <section className="panel clients-panel">
           <div className="panel-title">
             <Users2 size={18} />
-            <h2>Clients</h2>
+            <h2>子脑列表</h2>
           </div>
           <div className="client-list">
             {data.clients.map((client: ClientBrain) => (
@@ -477,60 +561,60 @@ export function DashboardClient() {
                   <span>{client.client_id}</span>
                 </div>
                 <div className="client-row-meta">
-                  <span className="status mode">{client.status}</span>
+                  <span className="status mode">{displayStatus(client.status)}</span>
                   <ArrowRight size={16} />
                 </div>
               </button>
             ))}
-            {!loading && data.clients.length === 0 ? <p className="empty">No clients returned by API</p> : null}
+            {!loading && data.clients.length === 0 ? <p className="empty">暂无子脑</p> : null}
           </div>
         </section>
 
         <section className="panel detail-panel">
           <div className="panel-title split">
             <div>
-              <p className="eyebrow">Selected Client</p>
-              <h2>{selectedClient?.name ?? "No client selected"}</h2>
+              <p className="eyebrow">当前子脑</p>
+              <h2>{selectedClient?.name ?? "未选择子脑"}</h2>
             </div>
-            {selectedClient ? <span className="status mode">{selectedClient.status}</span> : null}
+            {selectedClient ? <span className="status mode">{displayStatus(selectedClient.status)}</span> : null}
           </div>
 
           <div className="state-grid">
             <div>
-              <span>Client ID</span>
+              <span>子脑 ID</span>
               <strong>{selectedClient?.client_id ?? "-"}</strong>
             </div>
             <div>
-              <span>Project</span>
+              <span>所属项目</span>
               <strong>{selectedProject?.name ?? selectedClient?.project_id ?? "-"}</strong>
             </div>
             <div className="wide">
-              <span>Current Task</span>
-              <strong>{selectedClient?.current_task || "Idle"}</strong>
+              <span>当前任务</span>
+              <strong>{selectedClient?.current_task || "空闲"}</strong>
             </div>
           </div>
 
           <div className="actions">
             <button type="button" className="primary-button" onClick={executeTask} disabled={!selectedClient || busy}>
               <Play size={17} />
-              Execute
+              执行任务
             </button>
             <button type="button" className="secondary-button" onClick={copyHandoverContext} disabled={!selectedClient}>
               <Copy size={17} />
-              Copy Handover
+              复制接管
             </button>
             <a className="secondary-button" href={handoverLink || "#"}>
               <ExternalLink size={17} />
-              Open
+              打开
             </a>
           </div>
 
           <form className="task-form" onSubmit={createTask}>
             <input
-              aria-label="Task action"
+              aria-label="任务动作"
               value={taskAction}
               onChange={(event) => setTaskAction(event.target.value)}
-              placeholder="Task action"
+              placeholder="任务动作"
             />
             <button type="submit" className="icon-button dark" disabled={!selectedClient || busy || !taskAction.trim()}>
               <Plus size={18} />
@@ -539,7 +623,7 @@ export function DashboardClient() {
 
           <div className="handover-strip">
             <Link2 size={17} />
-            <span>{handoverLink || "No handover link"}</span>
+            <span>{handoverLink || "暂无接管链接"}</span>
           </div>
         </section>
       </section>
@@ -548,15 +632,15 @@ export function DashboardClient() {
         <section className="panel">
           <div className="panel-title">
             <CheckCircle2 size={18} />
-            <h2>Task Queue</h2>
+            <h2>任务队列</h2>
           </div>
           <div className="table-wrap">
             <table>
               <thead>
                 <tr>
-                  <th>Task</th>
-                  <th>Status</th>
-                  <th>Created</th>
+                  <th>任务</th>
+                  <th>状态</th>
+                  <th>创建时间</th>
                 </tr>
               </thead>
               <tbody>
@@ -564,21 +648,21 @@ export function DashboardClient() {
                   <tr key={task.task_id}>
                     <td>{task.action}</td>
                     <td>
-                      <span className={statusClass(task.status)}>{task.status}</span>
+                      <span className={statusClass(task.status)}>{displayStatus(task.status)}</span>
                     </td>
                     <td>{formatDate(task.created_at)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
-            {!loading && clientTasks.length === 0 ? <p className="empty">No tasks returned by API</p> : null}
+            {!loading && clientTasks.length === 0 ? <p className="empty">暂无任务</p> : null}
           </div>
         </section>
 
         <section className="panel">
           <div className="panel-title">
             <Activity size={18} />
-            <h2>Event Stream</h2>
+            <h2>事件流</h2>
           </div>
           <div className="event-list">
             {clientEvents.map((event: EventStreamItem) => (
@@ -590,7 +674,7 @@ export function DashboardClient() {
                 <code>{JSON.stringify(event.output)}</code>
               </div>
             ))}
-            {!loading && clientEvents.length === 0 ? <p className="empty">No events returned by API</p> : null}
+            {!loading && clientEvents.length === 0 ? <p className="empty">暂无事件</p> : null}
           </div>
         </section>
       </section>
