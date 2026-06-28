@@ -169,16 +169,44 @@ h2 {
   padding: 16px;
 }
 
-.create-client-panel {
-  margin-bottom: 12px;
+.system-panel {
+  margin-bottom: 10px;
 }
 
+.system-state-grid {
+  margin-bottom: 0;
+}
+
+.hierarchy-arrow {
+  display: grid;
+  min-height: 28px;
+  place-items: center;
+  color: var(--green);
+  font-size: 22px;
+  font-weight: 900;
+}
+
+.hierarchy-workspace {
+  margin-top: 0;
+}
+
+.create-project-form,
 .create-client-form {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(180px, 0.6fr) auto;
   gap: 10px;
+  margin-bottom: 14px;
 }
 
+.create-project-form {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.compact-create-form {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.create-project-form input,
 .create-client-form input,
 .create-client-form select {
   min-width: 0;
@@ -224,6 +252,18 @@ h2 {
   border-radius: 8px;
   background: #fbfcf8;
   padding: 12px;
+}
+
+.project-button {
+  width: 100%;
+  cursor: pointer;
+  color: var(--ink);
+  text-align: left;
+}
+
+.project-button.active {
+  border-color: var(--green);
+  background: #edf7f0;
 }
 
 .client-row {
@@ -500,6 +540,7 @@ td:first-child {
   .workspace,
   .bottom-grid,
   .handover-layout,
+  .create-project-form,
   .create-client-form,
   .state-grid {
     grid-template-columns: 1fr;
