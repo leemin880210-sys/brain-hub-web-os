@@ -266,6 +266,7 @@
     <script>
       const API_BASE = "https://leemin880210-sys.vercel.app/api";
       const REFRESH_INTERVAL_MS = 15000;
+      const API_RETRY_ATTEMPTS = 2;
 
       const state = {
         projects: [],
@@ -368,7 +369,7 @@
 
           notice("外脑 API 已同步");
         } catch (error) {
-          notice(`外脑 API 连接失败：${error.message}`, true);
+          notice("外脑连接中...");
           render();
         } finally {
           state.loading = false;
@@ -404,7 +405,7 @@
           render();
           if (showNotice) notice(`已接管子脑：${clientId}`);
         } catch (error) {
-          notice(`子脑状态读取失败：${error.message}`, true);
+          notice("外脑连接中...");
           render();
         } finally {
           state.loading = false;
@@ -542,6 +543,135 @@ AI 执行规则:
         await navigator.clipboard.writeText(el("handover").textContent);
         notice("接管上下文已复制");
       });
+
+      const wait = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
+
+      api = async function safeApi(path, options = {}) {
+        const headers = {
+          Accept: "application/json",
+          ...(options.headers || {})
+        };
+
+        if (options.body && !headers["Content-Type"]) {
+          headers["Content-Type"] = "application/json";
+        }
+
+        for (let attempt = 0; attempt <= API_RETRY_ATTEMPTS; attempt += 1) {
+          try {
+            const response = await fetch(`${API_BASE}${path}`, {
+              ...options,
+              headers
+            });
+            const text = await response.text();
+            let payload = null;
+
+            try {
+              payload = text ? JSON.parse(text) : null;
+            } catch {
+              payload = null;
+            }
+
+            if (!response.ok) {
+              throw new Error("外脑连接中...");
+            }
+
+            return payload ?? {};
+          } catch {
+            if (attempt < API_RETRY_ATTEMPTS) {
+              await wait(500 * (attempt + 1));
+            }
+          }
+        }
+
+        throw new Error("外脑连接中...");
+      };
+
+      renderLoading = function safeRenderLoading() {
+        el("api-base").textContent = `外脑接口地址：${API_BASE}`;
+        if (!state.projects.length) el("projects").innerHTML = `<div class="item"><span>外脑连接中...</span></div>`;
+        if (!state.clients.length) el("clients").innerHTML = `<div class="item"><span>外脑连接中...</span></div>`;
+        if (!state.taskQueue.length) el("tasks").innerHTML = `<div class="item"><span>外脑连接中...</span></div>`;
+        if (!state.eventStream.length) el("events").innerHTML = `<div class="item"><span>外脑连接中...</span></div>`;
+      };
+
+      loadDashboard = async function safeLoadDashboard() {
+        state.loading = true;
+        notice("外脑连接中...");
+        renderLoading();
+
+        try {
+          const [projectsPayload, clientsPayload, eventsPayload] = await Promise.all([
+            api("/projects"),
+            api("/clients"),
+            api("/events")
+          ]);
+
+          state.projects = asArray(projectsPayload, ["projects", "project_brains"]);
+          state.clients = asArray(clientsPayload, ["clients", "client_brains"]);
+          state.eventStream = asArray(eventsPayload, ["events", "event_stream", "event_history"]);
+
+          if (!state.selectedClientId && state.clients[0]) {
+            state.selectedClientId = getClientId(state.clients[0]);
+          }
+
+          if (state.selectedClientId) {
+            await selectClient(state.selectedClientId, false);
+          } else {
+            state.selectedStatePack = null;
+            state.taskQueue = [];
+            render();
+          }
+
+          notice("外脑 API 已同步");
+        } catch {
+          state.projects = Array.isArray(state.projects) ? state.projects : [];
+          state.clients = Array.isArray(state.clients) ? state.clients : [];
+          state.taskQueue = Array.isArray(state.taskQueue) ? state.taskQueue : [];
+          state.eventStream = Array.isArray(state.eventStream) ? state.eventStream : [];
+          notice("外脑连接中...");
+          render();
+        } finally {
+          state.loading = false;
+        }
+      };
+
+      selectClient = async function safeSelectClient(clientId, showNotice = true) {
+        state.selectedClientId = clientId;
+        state.loading = true;
+        if (showNotice) notice("外脑连接中...");
+
+        try {
+          const [statePackPayload, tasksPayload] = await Promise.all([
+            api(`/client/${encodeURIComponent(clientId)}`),
+            api(`/tasks?client_id=${encodeURIComponent(clientId)}`)
+          ]);
+
+          const clientState = statePackPayload?.client_state || statePackPayload?.client || statePackPayload?.state || {};
+          const taskQueue = asArray(statePackPayload, ["task_queue", "tasks"]);
+          const eventStream = asArray(statePackPayload, ["event_stream", "event_history", "events"]);
+
+          state.selectedStatePack = {
+            ...(statePackPayload || {}),
+            client_state: clientState,
+            task_queue: taskQueue.length ? taskQueue : asArray(tasksPayload, ["task_queue", "tasks"]),
+            event_stream: eventStream.length
+              ? eventStream
+              : state.eventStream.filter((event) => event.client_id === clientId)
+          };
+          state.taskQueue = state.selectedStatePack.task_queue;
+          state.eventStream = state.selectedStatePack.event_stream;
+
+          render();
+          if (showNotice) notice(`已接管子脑：${clientId}`);
+        } catch {
+          state.taskQueue = Array.isArray(state.taskQueue) ? state.taskQueue : [];
+          state.eventStream = Array.isArray(state.eventStream) ? state.eventStream : [];
+          notice("外脑连接中...");
+          render();
+        } finally {
+          state.loading = false;
+        }
+      };
 
       renderLoading();
       void loadDashboard();
