@@ -2,6 +2,7 @@
 
 import {
   Activity,
+  AlertCircle,
   ArrowRight,
   CheckCircle2,
   Clock3,
@@ -13,11 +14,31 @@ import {
   Play,
   Plus,
   RefreshCw,
+  Server,
   Users2
 } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import type { ClientBrain, EventStreamItem, OverviewPayload, Project, TaskQueueItem } from "@/lib/types";
+
+type ApiEnvelope<T> = T & {
+  success: boolean;
+  error?: string;
+  details?: unknown;
+};
+
+type HealthPayload = {
+  api: string;
+  supabase: string;
+  source: string;
+  data_real: boolean;
+  counts: {
+    projects: number;
+    clients: number;
+    tasks: number;
+    events: number;
+  };
+};
 
 type ExecuteResponse = {
   result: string;
@@ -34,6 +55,16 @@ type ClientStatePack = {
   events?: EventStreamItem[];
 };
 
+type ApiStatus = {
+  loading: boolean;
+  apiConnected: boolean;
+  supabaseConnected: boolean;
+  dataReal: boolean;
+  source: string;
+  error: string;
+  counts: HealthPayload["counts"];
+};
+
 const API_BASE = "https://leemin880210-sys.vercel.app/api";
 
 function apiUrl(url: string) {
@@ -43,7 +74,17 @@ function apiUrl(url: string) {
   return url;
 }
 
-async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
+function errorMessage(payload: ApiEnvelope<unknown>, fallback: string) {
+  if (payload.error) return payload.error;
+  if (typeof payload.details === "string") return payload.details;
+  if (payload.details && typeof payload.details === "object") {
+    const record = payload.details as Record<string, unknown>;
+    if (typeof record.message === "string") return record.message;
+  }
+  return fallback;
+}
+
+async function fetchJson<T>(url: string, init?: RequestInit): Promise<ApiEnvelope<T>> {
   const headers = new Headers(init?.headers);
   if (init?.body && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
@@ -51,15 +92,19 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
 
   const response = await fetch(apiUrl(url), {
     ...init,
-    headers
+    headers,
+    cache: "no-store"
   });
-  const payload = await response.json().catch(() => ({}));
+  const payload = (await response.json().catch(() => ({
+    success: false,
+    error: "Response was not JSON"
+  }))) as ApiEnvelope<T>;
 
-  if (!response.ok) {
-    throw new Error(typeof payload.error === "string" ? payload.error : "请求失败");
+  if (!response.ok || payload.success !== true) {
+    throw new Error(errorMessage(payload, `API request failed: ${url}`));
   }
 
-  return payload as T;
+  return payload;
 }
 
 function asArray<T>(payload: unknown, keys: string[]): T[] {
@@ -76,7 +121,7 @@ function asArray<T>(payload: unknown, keys: string[]): T[] {
 
 function formatDate(value?: string) {
   if (!value) return "-";
-  return new Intl.DateTimeFormat("zh-CN", {
+  return new Intl.DateTimeFormat("en-US", {
     month: "short",
     day: "2-digit",
     hour: "2-digit",
@@ -91,27 +136,6 @@ function statusClass(status: string) {
   return "status mode";
 }
 
-function displayLabel(value?: string) {
-  const labels: Record<string, string> = {
-    operation_system: "运营系统",
-    account_ops: "采集模式",
-    operation_ops: "执行模式",
-    evolution_ops: "优化模式",
-    pending: "待处理",
-    running: "执行中",
-    done: "已完成",
-    blocked: "已阻塞",
-    failed: "失败",
-    execution: "执行",
-    chat: "对话",
-    update: "更新",
-    task_execution: "任务执行",
-    state_update: "状态更新"
-  };
-
-  return value ? labels[value] ?? value : "-";
-}
-
 function Metric({ icon, label, value }: { icon: ReactNode; label: string; value: number }) {
   return (
     <article className="metric">
@@ -124,12 +148,39 @@ function Metric({ icon, label, value }: { icon: ReactNode; label: string; value:
   );
 }
 
+function StatusBadge({ label, ok, detail }: { label: string; ok: boolean; detail: string }) {
+  return (
+    <article className={ok ? "metric" : "metric status-error-card"}>
+      <div className="metric-icon">{ok ? <CheckCircle2 size={20} /> : <AlertCircle size={20} />}</div>
+      <div>
+        <span>{label}</span>
+        <strong>{ok ? "OK" : "FAILED"}</strong>
+        <small>{detail}</small>
+      </div>
+    </article>
+  );
+}
+
 export function DashboardClient() {
   const [data, setData] = useState<OverviewPayload>({
     projects: [],
     clients: [],
     tasks: [],
     recent_events: []
+  });
+  const [apiStatus, setApiStatus] = useState<ApiStatus>({
+    loading: true,
+    apiConnected: false,
+    supabaseConnected: false,
+    dataReal: false,
+    source: "-",
+    error: "",
+    counts: {
+      projects: 0,
+      clients: 0,
+      tasks: 0,
+      events: 0
+    }
   });
   const [statePack, setStatePack] = useState<ClientStatePack | null>(null);
   const [selectedClientId, setSelectedClientId] = useState("");
@@ -138,6 +189,32 @@ export function DashboardClient() {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [origin, setOrigin] = useState("");
+
+  const refreshHealth = useCallback(async () => {
+    setApiStatus((current) => ({ ...current, loading: true }));
+    try {
+      const health = await fetchJson<HealthPayload>("/api/health");
+      setApiStatus({
+        loading: false,
+        apiConnected: health.api === "connected",
+        supabaseConnected: health.supabase === "connected",
+        dataReal: health.data_real === true,
+        source: health.source,
+        error: "",
+        counts: health.counts
+      });
+    } catch (error) {
+      setApiStatus((current) => ({
+        ...current,
+        loading: false,
+        apiConnected: false,
+        supabaseConnected: false,
+        dataReal: false,
+        error: error instanceof Error ? error.message : "Health check failed"
+      }));
+      throw error;
+    }
+  }, []);
 
   const loadClientContext = useCallback(async (clientId: string) => {
     const [clientPayload, tasksPayload, eventsPayload] = await Promise.all([
@@ -163,6 +240,7 @@ export function DashboardClient() {
     setLoading(true);
     setNotice("");
     try {
+      await refreshHealth();
       const [projectsPayload, clientsPayload, tasksPayload, eventsPayload] = await Promise.all([
         fetchJson<unknown>("/api/projects"),
         fetchJson<unknown>("/api/clients"),
@@ -176,17 +254,21 @@ export function DashboardClient() {
         recent_events: asArray<EventStreamItem>(eventsPayload, ["events", "event_stream", "event_history"])
       };
       setData(overview);
+
       const nextClientId = selectedClientId || overview.clients[0]?.client_id || "";
       setSelectedClientId(nextClientId);
       if (nextClientId) {
         await loadClientContext(nextClientId);
+      } else {
+        setStatePack(null);
       }
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "后端 API 不可用");
+      const message = error instanceof Error ? error.message : "API request failed";
+      setNotice(message);
     } finally {
       setLoading(false);
     }
-  }, [loadClientContext, selectedClientId]);
+  }, [loadClientContext, refreshHealth, selectedClientId]);
 
   useEffect(() => {
     setOrigin(window.location.origin);
@@ -243,10 +325,10 @@ export function DashboardClient() {
         })
       });
       setTaskAction("");
-      setNotice("任务已写入外脑 API");
+      setNotice("Task written to Supabase");
       await load();
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "创建任务失败");
+      setNotice(error instanceof Error ? error.message : "Failed to create task");
     } finally {
       setBusy(false);
     }
@@ -268,10 +350,10 @@ export function DashboardClient() {
           }
         })
       });
-      setNotice(`执行结果：${result.result}`);
+      setNotice(`Execution result: ${result.result}`);
       await load();
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "执行失败");
+      setNotice(error instanceof Error ? error.message : "Execution failed");
     } finally {
       setBusy(false);
     }
@@ -291,9 +373,9 @@ export function DashboardClient() {
         typeof handover.handover_text === "string" ? handover.handover_text : JSON.stringify(handover, null, 2);
 
       await navigator.clipboard.writeText(handoverText);
-      setNotice("AI 接管上下文已复制");
+      setNotice("AI handover context copied");
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "生成接管上下文失败");
+      setNotice(error instanceof Error ? error.message : "Handover failed");
     } finally {
       setBusy(false);
     }
@@ -305,9 +387,9 @@ export function DashboardClient() {
     setNotice("");
     try {
       await loadClientContext(clientId);
-      setNotice(`已加载子脑 ${clientId} 的状态、任务和事件`);
+      setNotice(`Loaded client ${clientId}`);
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "加载子脑失败");
+      setNotice(error instanceof Error ? error.message : "Failed to load client");
     } finally {
       setBusy(false);
     }
@@ -317,28 +399,51 @@ export function DashboardClient() {
     <main className="shell">
       <header className="topbar">
         <div>
-          <p className="eyebrow">外脑 API 可视化控制台</p>
-          <h1>Brain Hub 外脑控制台</h1>
+          <p className="eyebrow">Real API Validation</p>
+          <h1>Brain Hub API Console</h1>
         </div>
-        <button className="icon-button" type="button" onClick={load} disabled={loading || busy} aria-label="刷新">
+        <button className="icon-button" type="button" onClick={load} disabled={loading || busy} aria-label="Refresh">
           <RefreshCw size={18} />
         </button>
       </header>
 
-      {notice ? <div className="notice">{notice}</div> : null}
+      {notice ? <div className={apiStatus.apiConnected ? "notice" : "notice error"}>{notice}</div> : null}
 
-      <section className="metric-grid" aria-label="总览">
-        <Metric icon={<Layers3 size={20} />} label="项目" value={data.projects.length} />
-        <Metric icon={<Users2 size={20} />} label="子脑" value={data.clients.length} />
-        <Metric icon={<Clock3 size={20} />} label="待处理" value={pendingCount} />
-        <Metric icon={<Activity size={20} />} label="执行中" value={runningCount} />
+      <section className="metric-grid" aria-label="API status">
+        <StatusBadge
+          label="Backend API"
+          ok={apiStatus.apiConnected}
+          detail={apiStatus.loading ? "checking..." : apiStatus.error || "health endpoint returned success"}
+        />
+        <StatusBadge
+          label="Supabase"
+          ok={apiStatus.supabaseConnected}
+          detail={apiStatus.loading ? "checking..." : apiStatus.error || "live database query succeeded"}
+        />
+        <StatusBadge
+          label="Real Data"
+          ok={apiStatus.dataReal}
+          detail={
+            apiStatus.loading
+              ? "checking..."
+              : `source=${apiStatus.source}; projects=${apiStatus.counts.projects}; clients=${apiStatus.counts.clients}; tasks=${apiStatus.counts.tasks}`
+          }
+        />
+        <Metric icon={<Server size={20} />} label="Events" value={apiStatus.counts.events} />
+      </section>
+
+      <section className="metric-grid" aria-label="Overview">
+        <Metric icon={<Layers3 size={20} />} label="Projects" value={data.projects.length} />
+        <Metric icon={<Users2 size={20} />} label="Clients" value={data.clients.length} />
+        <Metric icon={<Clock3 size={20} />} label="Pending" value={pendingCount} />
+        <Metric icon={<Activity size={20} />} label="Running" value={runningCount} />
       </section>
 
       <section className="workspace">
         <section className="panel">
           <div className="panel-title">
             <Database size={18} />
-            <h2>项目列表</h2>
+            <h2>Projects</h2>
           </div>
           <div className="list">
             {data.projects.map((project: Project) => (
@@ -347,17 +452,17 @@ export function DashboardClient() {
                   <strong>{project.name}</strong>
                   <span>{project.project_id}</span>
                 </div>
-                <span className="status mode">{displayLabel(project.mode)}</span>
+                <span className="status mode">{project.mode}</span>
               </div>
             ))}
-            {!loading && data.projects.length === 0 ? <p className="empty">暂无项目数据</p> : null}
+            {!loading && data.projects.length === 0 ? <p className="empty">No projects returned by API</p> : null}
           </div>
         </section>
 
         <section className="panel clients-panel">
           <div className="panel-title">
             <Users2 size={18} />
-            <h2>子脑列表</h2>
+            <h2>Clients</h2>
           </div>
           <div className="client-list">
             {data.clients.map((client: ClientBrain) => (
@@ -372,60 +477,60 @@ export function DashboardClient() {
                   <span>{client.client_id}</span>
                 </div>
                 <div className="client-row-meta">
-                  <span className="status mode">{displayLabel(client.status)}</span>
+                  <span className="status mode">{client.status}</span>
                   <ArrowRight size={16} />
                 </div>
               </button>
             ))}
-            {!loading && data.clients.length === 0 ? <p className="empty">暂无子脑数据</p> : null}
+            {!loading && data.clients.length === 0 ? <p className="empty">No clients returned by API</p> : null}
           </div>
         </section>
 
         <section className="panel detail-panel">
           <div className="panel-title split">
             <div>
-              <p className="eyebrow">当前接管子脑</p>
-              <h2>{selectedClient?.name ?? "未选择子脑"}</h2>
+              <p className="eyebrow">Selected Client</p>
+              <h2>{selectedClient?.name ?? "No client selected"}</h2>
             </div>
-            {selectedClient ? <span className="status mode">{displayLabel(selectedClient.status)}</span> : null}
+            {selectedClient ? <span className="status mode">{selectedClient.status}</span> : null}
           </div>
 
           <div className="state-grid">
             <div>
-              <span>子脑 ID</span>
+              <span>Client ID</span>
               <strong>{selectedClient?.client_id ?? "-"}</strong>
             </div>
             <div>
-              <span>所属项目</span>
+              <span>Project</span>
               <strong>{selectedProject?.name ?? selectedClient?.project_id ?? "-"}</strong>
             </div>
             <div className="wide">
-              <span>当前任务</span>
-              <strong>{selectedClient?.current_task || "空闲"}</strong>
+              <span>Current Task</span>
+              <strong>{selectedClient?.current_task || "Idle"}</strong>
             </div>
           </div>
 
           <div className="actions">
             <button type="button" className="primary-button" onClick={executeTask} disabled={!selectedClient || busy}>
               <Play size={17} />
-              执行
+              Execute
             </button>
             <button type="button" className="secondary-button" onClick={copyHandoverContext} disabled={!selectedClient}>
               <Copy size={17} />
-              复制接管上下文
+              Copy Handover
             </button>
             <a className="secondary-button" href={handoverLink || "#"}>
               <ExternalLink size={17} />
-              打开
+              Open
             </a>
           </div>
 
           <form className="task-form" onSubmit={createTask}>
             <input
-              aria-label="任务动作"
+              aria-label="Task action"
               value={taskAction}
               onChange={(event) => setTaskAction(event.target.value)}
-              placeholder="输入任务动作"
+              placeholder="Task action"
             />
             <button type="submit" className="icon-button dark" disabled={!selectedClient || busy || !taskAction.trim()}>
               <Plus size={18} />
@@ -434,7 +539,7 @@ export function DashboardClient() {
 
           <div className="handover-strip">
             <Link2 size={17} />
-            <span>{handoverLink || "暂无接管链接"}</span>
+            <span>{handoverLink || "No handover link"}</span>
           </div>
         </section>
       </section>
@@ -443,15 +548,15 @@ export function DashboardClient() {
         <section className="panel">
           <div className="panel-title">
             <CheckCircle2 size={18} />
-            <h2>任务队列</h2>
+            <h2>Task Queue</h2>
           </div>
           <div className="table-wrap">
             <table>
               <thead>
                 <tr>
-                  <th>任务</th>
-                  <th>状态</th>
-                  <th>创建时间</th>
+                  <th>Task</th>
+                  <th>Status</th>
+                  <th>Created</th>
                 </tr>
               </thead>
               <tbody>
@@ -459,33 +564,33 @@ export function DashboardClient() {
                   <tr key={task.task_id}>
                     <td>{task.action}</td>
                     <td>
-                      <span className={statusClass(task.status)}>{displayLabel(task.status)}</span>
+                      <span className={statusClass(task.status)}>{task.status}</span>
                     </td>
                     <td>{formatDate(task.created_at)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
-            {!loading && clientTasks.length === 0 ? <p className="empty">暂无任务</p> : null}
+            {!loading && clientTasks.length === 0 ? <p className="empty">No tasks returned by API</p> : null}
           </div>
         </section>
 
         <section className="panel">
           <div className="panel-title">
             <Activity size={18} />
-            <h2>事件流</h2>
+            <h2>Event Stream</h2>
           </div>
           <div className="event-list">
             {clientEvents.map((event: EventStreamItem) => (
               <div className="event-row" key={event.event_id}>
                 <div>
-                  <strong>{displayLabel(event.type)}</strong>
+                  <strong>{event.type}</strong>
                   <span>{formatDate(event.timestamp)}</span>
                 </div>
                 <code>{JSON.stringify(event.output)}</code>
               </div>
             ))}
-            {!loading && clientEvents.length === 0 ? <p className="empty">暂无事件</p> : null}
+            {!loading && clientEvents.length === 0 ? <p className="empty">No events returned by API</p> : null}
           </div>
         </section>
       </section>
