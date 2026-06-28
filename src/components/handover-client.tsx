@@ -12,6 +12,7 @@ type RuntimeResponse = {
 };
 
 const API_BASE = "https://leemin880210-sys.vercel.app/api";
+const API_RETRY_ATTEMPTS = 2;
 
 function apiUrl(url: string) {
   if (url.startsWith("http")) return url;
@@ -20,23 +21,37 @@ function apiUrl(url: string) {
   return url;
 }
 
+function sleep(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers);
   if (init?.body && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
 
-  const response = await fetch(apiUrl(url), {
-    ...init,
-    headers
-  });
-  const payload = await response.json().catch(() => ({}));
+  for (let attempt = 0; attempt <= API_RETRY_ATTEMPTS; attempt += 1) {
+    try {
+      const response = await fetch(apiUrl(url), {
+        ...init,
+        headers
+      });
+      const payload = await response.json().catch(() => ({}));
 
-  if (!response.ok) {
-    throw new Error(typeof payload.error === "string" ? payload.error : "请求失败");
+      if (!response.ok) {
+        throw new Error("外脑连接中...");
+      }
+
+      return (payload ?? {}) as T;
+    } catch {
+      if (attempt < API_RETRY_ATTEMPTS) {
+        await sleep(500 * (attempt + 1));
+      }
+    }
   }
 
-  return payload as T;
+  throw new Error("外脑连接中...");
 }
 
 function formatDate(value?: string) {
@@ -97,7 +112,7 @@ export function HandoverClient() {
       const handover = await fetchJson<HandoverPayload>(`/api/handover?client_id=${encodeURIComponent(clientId)}`);
       setPayload(handover);
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "接管数据不可用");
+      setNotice("外脑连接中...");
     } finally {
       setLoading(false);
     }
@@ -107,17 +122,15 @@ export function HandoverClient() {
     void load();
   }, [load]);
 
-  const pendingTasks = useMemo(
-    () => payload?.task_queue.filter((task) => task.status === "pending") ?? [],
-    [payload?.task_queue]
-  );
-  const runningTasks = useMemo(
-    () => payload?.task_queue.filter((task) => task.status === "running") ?? [],
-    [payload?.task_queue]
-  );
+  const taskQueue = useMemo(() => payload?.task_queue ?? [], [payload?.task_queue]);
+  const eventHistory = useMemo(() => payload?.event_history ?? [], [payload?.event_history]);
+  const activeClient = payload?.client ?? payload?.client_state ?? null;
+  const activeProject = payload?.project ?? null;
+  const pendingTasks = useMemo(() => taskQueue.filter((task) => task.status === "pending"), [taskQueue]);
+  const runningTasks = useMemo(() => taskQueue.filter((task) => task.status === "running"), [taskQueue]);
 
   async function runCycle() {
-    if (!payload) return;
+    if (!activeClient) return;
 
     setBusy(true);
     setNotice("");
@@ -125,14 +138,14 @@ export function HandoverClient() {
       const result = await fetchJson<RuntimeResponse>("/api/runtime/step", {
         method: "POST",
         body: JSON.stringify({
-          client_id: payload.client.client_id,
+          client_id: activeClient.client_id,
           auto_complete: true
         })
       });
       setNotice(`运行结果：${displayLabel(result.status)}，阶段：${result.phase}`);
       await load();
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "运行循环失败");
+      setNotice("外脑连接中...");
     } finally {
       setBusy(false);
     }
@@ -149,7 +162,7 @@ export function HandoverClient() {
       <header className="topbar">
         <div>
           <p className="eyebrow">AI 接管</p>
-          <h1>{payload?.client.name ?? clientId}</h1>
+          <h1>{activeClient?.name ?? clientId}</h1>
         </div>
         <div className="topbar-actions">
           <Link className="secondary-button" href="/">
@@ -169,15 +182,15 @@ export function HandoverClient() {
           <div className="panel-title split">
             <div>
               <p className="eyebrow">执行模式</p>
-              <h2>{payload?.client.client_id ?? "-"}</h2>
+              <h2>{activeClient?.client_id ?? "-"}</h2>
             </div>
-            {payload ? <span className="status mode">{displayLabel(payload.client.status)}</span> : null}
+            {activeClient ? <span className="status mode">{displayLabel(activeClient.status)}</span> : null}
           </div>
 
           <div className="state-grid">
             <div>
               <span>所属项目</span>
-              <strong>{payload?.project.name ?? "-"}</strong>
+              <strong>{activeProject?.name ?? "-"}</strong>
             </div>
             <div>
               <span>待处理</span>
@@ -189,12 +202,12 @@ export function HandoverClient() {
             </div>
             <div>
               <span>当前任务</span>
-              <strong>{payload?.client.current_task || "空闲"}</strong>
+              <strong>{activeClient?.current_task || "空闲"}</strong>
             </div>
           </div>
 
           <div className="actions">
-            <button className="primary-button" type="button" onClick={runCycle} disabled={!payload || busy}>
+            <button className="primary-button" type="button" onClick={runCycle} disabled={!activeClient || busy}>
               <Play size={17} />
               运行循环
             </button>
@@ -205,7 +218,7 @@ export function HandoverClient() {
           </div>
 
           <div className="protocol-box">
-            <pre>{payload?.handover_text ?? "暂无接管数据"}</pre>
+            <pre>{loading ? "外脑连接中..." : payload?.handover_text ?? "暂无接管数据"}</pre>
           </div>
         </section>
 
@@ -224,13 +237,14 @@ export function HandoverClient() {
               <h2>任务队列</h2>
             </div>
             <div className="compact-list">
-              {payload?.task_queue.map((task: TaskQueueItem) => (
+              {taskQueue.map((task: TaskQueueItem) => (
                 <div className="compact-row" key={task.task_id}>
                   <span>{task.action}</span>
                   <span className={statusClass(task.status)}>{displayLabel(task.status)}</span>
                 </div>
               ))}
-              {!loading && payload?.task_queue.length === 0 ? <p className="empty">暂无任务</p> : null}
+              {loading && taskQueue.length === 0 ? <p className="empty">外脑连接中...</p> : null}
+              {!loading && taskQueue.length === 0 ? <p className="empty">暂无任务</p> : null}
             </div>
           </section>
 
@@ -240,13 +254,14 @@ export function HandoverClient() {
               <h2>事件</h2>
             </div>
             <div className="compact-list">
-              {payload?.event_history.slice(0, 8).map((event: EventStreamItem) => (
+              {eventHistory.slice(0, 8).map((event: EventStreamItem) => (
                 <div className="compact-row" key={event.event_id}>
                   <span>{displayLabel(event.type)}</span>
                   <span>{formatDate(event.timestamp)}</span>
                 </div>
               ))}
-              {!loading && payload?.event_history.length === 0 ? <p className="empty">暂无事件</p> : null}
+              {loading && eventHistory.length === 0 ? <p className="empty">外脑连接中...</p> : null}
+              {!loading && eventHistory.length === 0 ? <p className="empty">暂无事件</p> : null}
             </div>
           </section>
         </section>
