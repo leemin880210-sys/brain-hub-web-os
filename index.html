@@ -1,0 +1,529 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Brain Hub Web OS</title>
+    <style>
+      :root {
+        --bg: #f7f8f3;
+        --panel: #ffffff;
+        --ink: #1d2521;
+        --muted: #65736c;
+        --line: #d9dfd4;
+        --green: #176b5b;
+        --blue: #315f9d;
+        --amber: #a96818;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      main {
+        width: min(1180px, calc(100% - 28px));
+        margin: 0 auto;
+        padding: 26px 0 40px;
+      }
+      header,
+      .row,
+      .actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      header {
+        justify-content: space-between;
+        margin-bottom: 14px;
+      }
+      h1,
+      h2 {
+        margin: 0;
+      }
+      h1 {
+        font-size: 30px;
+      }
+      h2 {
+        font-size: 17px;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: 0.8fr 1fr 1.2fr;
+        gap: 12px;
+      }
+      .bottom {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+        margin-top: 12px;
+      }
+      .panel {
+        min-width: 0;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel);
+        padding: 14px;
+      }
+      .panel-title {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        margin-bottom: 12px;
+      }
+      input,
+      button,
+      textarea {
+        font: inherit;
+      }
+      input,
+      textarea {
+        width: 100%;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 10px 11px;
+      }
+      textarea {
+        min-height: 130px;
+        resize: vertical;
+      }
+      button {
+        min-height: 40px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #ffffff;
+        color: var(--ink);
+        cursor: pointer;
+        font-weight: 800;
+        padding: 0 13px;
+      }
+      button.primary {
+        border-color: var(--green);
+        background: var(--green);
+        color: #ffffff;
+      }
+      button:disabled {
+        cursor: not-allowed;
+        opacity: 0.55;
+      }
+      .stack {
+        display: grid;
+        gap: 9px;
+      }
+      .item {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fbfcf8;
+        padding: 11px;
+      }
+      .item.active {
+        border-color: var(--green);
+        background: #edf7f0;
+      }
+      .item strong,
+      .item span {
+        display: block;
+      }
+      .item span,
+      .muted {
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 700;
+      }
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        min-height: 24px;
+        border: 1px solid currentColor;
+        border-radius: 999px;
+        padding: 2px 8px;
+        color: var(--blue);
+        font-size: 12px;
+        font-weight: 800;
+      }
+      .badge.pending {
+        color: var(--amber);
+      }
+      .badge.done {
+        color: var(--green);
+      }
+      .notice {
+        margin-bottom: 12px;
+        border: 1px solid #d7c799;
+        border-radius: 8px;
+        background: #fff8e6;
+        color: #6b4b0e;
+        padding: 10px 12px;
+        font-weight: 800;
+      }
+      pre {
+        max-height: 320px;
+        overflow: auto;
+        border-radius: 8px;
+        background: #17201c;
+        color: #e8f2eb;
+        padding: 12px;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+      .task-form {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 8px;
+      }
+      @media (max-width: 850px) {
+        header,
+        .row,
+        .actions {
+          align-items: stretch;
+          flex-direction: column;
+        }
+        .grid,
+        .bottom {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div>
+          <div class="muted">Cloud Runtime</div>
+          <h1>Brain Hub Web OS</h1>
+        </div>
+        <div class="actions">
+          <button id="connect">Connect</button>
+          <button id="refresh">Refresh</button>
+        </div>
+      </header>
+
+      <section class="panel">
+        <div class="row">
+          <input id="supabase-url" placeholder="Supabase URL, e.g. https://project.supabase.co" />
+          <input id="supabase-key" placeholder="Supabase anon key" />
+        </div>
+      </section>
+
+      <div id="notice" class="notice" hidden></div>
+
+      <section class="grid" style="margin-top: 12px">
+        <section class="panel">
+          <div class="panel-title">
+            <h2>Projects</h2>
+          </div>
+          <div id="projects" class="stack"></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-title">
+            <h2>Clients</h2>
+          </div>
+          <div id="clients" class="stack"></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-title">
+            <h2>Handover</h2>
+            <span id="client-status" class="badge">idle</span>
+          </div>
+          <div class="stack">
+            <div class="item">
+              <span>Client</span>
+              <strong id="current-client">-</strong>
+            </div>
+            <div class="item">
+              <span>Current Task</span>
+              <strong id="current-task">Idle</strong>
+            </div>
+            <div class="actions">
+              <button id="run" class="primary">Run Cycle</button>
+              <button id="copy">Copy Handover</button>
+            </div>
+            <pre id="handover">No client selected</pre>
+          </div>
+        </section>
+      </section>
+
+      <section class="bottom">
+        <section class="panel">
+          <div class="panel-title">
+            <h2>Task Queue</h2>
+          </div>
+          <form id="task-form" class="task-form">
+            <input id="task-action" placeholder="Task action" />
+            <button type="submit">Add</button>
+          </form>
+          <div id="tasks" class="stack" style="margin-top: 10px"></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-title">
+            <h2>Event Stream</h2>
+          </div>
+          <div id="events" class="stack"></div>
+        </section>
+      </section>
+    </main>
+
+    <script>
+      const state = {
+        url: "",
+        key: "",
+        projects: [],
+        clients: [],
+        tasks: [],
+        events: [],
+        selectedClientId: new URLSearchParams(location.search).get("client_id") || ""
+      };
+
+      const el = (id) => document.getElementById(id);
+
+      function notice(message) {
+        el("notice").hidden = !message;
+        el("notice").textContent = message || "";
+      }
+
+      function headers(extra = {}) {
+        return {
+          apikey: state.key,
+          Authorization: `Bearer ${state.key}`,
+          "Content-Type": "application/json",
+          Prefer: "return=representation",
+          ...extra
+        };
+      }
+
+      async function rest(path, options = {}) {
+        if (!state.url || !state.key) throw new Error("Supabase URL and anon key are required");
+        const response = await fetch(`${state.url.replace(/\\/$/, "")}/rest/v1/${path}`, {
+          ...options,
+          headers: headers(options.headers || {})
+        });
+        const text = await response.text();
+        const payload = text ? JSON.parse(text) : null;
+        if (!response.ok) throw new Error(payload?.message || payload?.hint || response.statusText);
+        return payload;
+      }
+
+      async function loadAll() {
+        notice("");
+        const [projects, clients, tasks, events] = await Promise.all([
+          rest("projects?select=*&order=name.asc"),
+          rest("client_brains?select=*&order=client_id.asc"),
+          rest("task_queue?select=*&order=created_at.asc"),
+          rest("event_stream?select=*&order=timestamp.desc&limit=30")
+        ]);
+        state.projects = projects || [];
+        state.clients = clients || [];
+        state.tasks = tasks || [];
+        state.events = events || [];
+        if (!state.selectedClientId && state.clients[0]) state.selectedClientId = state.clients[0].client_id;
+        render();
+      }
+
+      function selectedClient() {
+        return state.clients.find((client) => client.client_id === state.selectedClientId) || null;
+      }
+
+      function render() {
+        el("projects").innerHTML = state.projects
+          .map(
+            (project) => `<div class="item"><strong>${escapeHtml(project.name)}</strong><span>${escapeHtml(
+              project.project_id
+            )}</span></div>`
+          )
+          .join("");
+
+        el("clients").innerHTML = state.clients
+          .map(
+            (client) => `<button class="item ${client.client_id === state.selectedClientId ? "active" : ""}" data-client="${
+              client.client_id
+            }" type="button"><strong>${escapeHtml(client.name)}</strong><span>${escapeHtml(client.client_id)}</span></button>`
+          )
+          .join("");
+
+        document.querySelectorAll("[data-client]").forEach((button) => {
+          button.addEventListener("click", () => {
+            state.selectedClientId = button.dataset.client;
+            render();
+          });
+        });
+
+        const client = selectedClient();
+        const tasks = state.tasks.filter((task) => task.client_id === client?.client_id);
+        const events = state.events.filter((event) => event.client_id === client?.client_id);
+        const project = state.projects.find((item) => item.project_id === client?.project_id);
+
+        el("current-client").textContent = client ? `${client.name} / ${client.client_id}` : "-";
+        el("current-task").textContent = client?.current_task || "Idle";
+        el("client-status").textContent = client?.status || "idle";
+        el("handover").textContent = client
+          ? buildHandoverText(project, client, tasks, events)
+          : "No client selected";
+
+        el("tasks").innerHTML = tasks
+          .map(
+            (task) => `<div class="item"><strong>${escapeHtml(task.action)}</strong><span class="badge ${
+              task.status
+            }">${escapeHtml(task.status)}</span></div>`
+          )
+          .join("");
+        el("events").innerHTML = events
+          .map(
+            (event) => `<div class="item"><strong>${escapeHtml(event.type)}</strong><span>${escapeHtml(
+              new Date(event.timestamp).toLocaleString()
+            )}</span></div>`
+          )
+          .join("");
+      }
+
+      function buildHandoverText(project, client, tasks, events) {
+        return `# Brain Hub Web OS Handover Protocol
+
+client_id = ${client.client_id}
+project_id = ${client.project_id}
+
+current_state:
+${JSON.stringify(
+  {
+    client_id: client.client_id,
+    project_id: client.project_id,
+    name: client.name,
+    status: client.status,
+    current_task: client.current_task || ""
+  },
+  null,
+  2
+)}
+
+task_queue:
+${JSON.stringify(tasks, null, 2)}
+
+event_history:
+${JSON.stringify(events, null, 2)}
+
+RULES:
+- Do not reset state.
+- Continue existing task queue.
+- Write updates to Supabase cloud.`;
+      }
+
+      async function addEvent(clientId, input, output) {
+        const rows = await rest("event_stream", {
+          method: "POST",
+          body: JSON.stringify([{ client_id: clientId, type: "execution", input, output }])
+        });
+        return rows[0];
+      }
+
+      async function setClientTask(clientId, currentTask) {
+        await rest(`client_brains?client_id=eq.${encodeURIComponent(clientId)}`, {
+          method: "PATCH",
+          body: JSON.stringify({ current_task: currentTask || "" })
+        });
+      }
+
+      async function setTaskStatus(taskId, status) {
+        const rows = await rest(`task_queue?task_id=eq.${encodeURIComponent(taskId)}`, {
+          method: "PATCH",
+          body: JSON.stringify({ status })
+        });
+        return rows[0];
+      }
+
+      async function runCycle() {
+        const client = selectedClient();
+        if (!client) return;
+        notice("");
+        const running = state.tasks.find((task) => task.client_id === client.client_id && task.status === "running");
+        let task = running || state.tasks.find((item) => item.client_id === client.client_id && item.status === "pending");
+
+        if (!task) {
+          await setClientTask(client.client_id, "");
+          await addEvent(client.client_id, { loop: ["READ_STATE", "GET_TASK"] }, { status: "idle" });
+          notice("Runtime idle");
+          await loadAll();
+          return;
+        }
+
+        if (task.status === "pending") {
+          task = await setTaskStatus(task.task_id, "running");
+          await setClientTask(client.client_id, task.action);
+          await addEvent(client.client_id, { loop: ["READ_STATE", "GET_TASK", "EXECUTE"], task }, { status: "running" });
+        }
+
+        const done = await setTaskStatus(task.task_id, "done");
+        const next = state.tasks.find(
+          (item) => item.client_id === client.client_id && item.status === "pending" && item.task_id !== task.task_id
+        );
+        await setClientTask(client.client_id, next?.action || "");
+        await addEvent(client.client_id, { loop: ["WRITE_EVENT", "UPDATE_STATE"], task: done }, { status: "done" });
+        notice("Runtime done");
+        await loadAll();
+      }
+
+      function escapeHtml(value) {
+        return String(value ?? "")
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#039;");
+      }
+
+      el("connect").addEventListener("click", async () => {
+        state.url = el("supabase-url").value.trim();
+        state.key = el("supabase-key").value.trim();
+        try {
+          await loadAll();
+          notice("Connected");
+        } catch (error) {
+          notice(error.message);
+        }
+      });
+
+      el("refresh").addEventListener("click", async () => {
+        try {
+          await loadAll();
+        } catch (error) {
+          notice(error.message);
+        }
+      });
+
+      el("run").addEventListener("click", async () => {
+        try {
+          await runCycle();
+        } catch (error) {
+          notice(error.message);
+        }
+      });
+
+      el("copy").addEventListener("click", async () => {
+        await navigator.clipboard.writeText(el("handover").textContent);
+        notice("Handover copied");
+      });
+
+      el("task-form").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const client = selectedClient();
+        const action = el("task-action").value.trim();
+        if (!client || !action) return;
+        try {
+          await rest("task_queue", {
+            method: "POST",
+            body: JSON.stringify([{ client_id: client.client_id, action, status: "pending" }])
+          });
+          el("task-action").value = "";
+          await loadAll();
+          notice("Task queued");
+        } catch (error) {
+          notice(error.message);
+        }
+      });
+    </script>
+  </body>
+</html>
