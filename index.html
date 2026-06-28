@@ -12,6 +12,7 @@
         --muted: #65736c;
         --line: #d9dfd4;
         --green: #176b5b;
+        --green-dark: #0d423a;
         --blue: #315f9d;
         --amber: #a96818;
         --red: #b4493f;
@@ -31,50 +32,36 @@
         padding: 26px 0 40px;
       }
       header,
-      .row,
-      .actions {
+      .actions,
+      .panel-title,
+      .row {
         display: flex;
         align-items: center;
         gap: 10px;
       }
-      header {
+      header,
+      .panel-title.split,
+      .row.split {
         justify-content: space-between;
+      }
+      header {
         margin-bottom: 14px;
       }
       h1,
-      h2 {
+      h2,
+      p {
         margin: 0;
       }
       h1 {
         font-size: 30px;
       }
       h2 {
-        font-size: 17px;
+        font-size: 18px;
       }
-      .grid {
-        display: grid;
-        grid-template-columns: 0.8fr 1fr 1.2fr;
-        gap: 12px;
-      }
-      .bottom {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 12px;
-        margin-top: 12px;
-      }
-      .panel {
-        min-width: 0;
-        border: 1px solid var(--line);
-        border-radius: 8px;
-        background: var(--panel);
-        padding: 14px;
-      }
-      .panel-title {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 10px;
-        margin-bottom: 12px;
+      button,
+      input,
+      select {
+        font: inherit;
       }
       button {
         min-height: 40px;
@@ -83,7 +70,6 @@
         background: #ffffff;
         color: var(--ink);
         cursor: pointer;
-        font: inherit;
         font-weight: 800;
         padding: 0 13px;
       }
@@ -92,7 +78,8 @@
         background: var(--green);
         color: #ffffff;
       }
-      button:disabled {
+      button:disabled,
+      input:disabled {
         cursor: not-allowed;
         opacity: 0.55;
       }
@@ -104,16 +91,77 @@
         border-radius: 8px;
         background: #ffffff;
         color: var(--ink);
-        font: inherit;
         padding: 0 12px;
       }
-      .create-client-panel {
+      .muted,
+      .eyebrow,
+      .item span,
+      .state-grid span {
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 800;
+      }
+      .panel {
+        min-width: 0;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel);
+        padding: 14px;
+      }
+      .panel-title {
+        margin-bottom: 12px;
+        color: var(--green-dark);
+      }
+      .system-panel {
+        margin-bottom: 10px;
+      }
+      .hierarchy-arrow {
+        display: grid;
+        min-height: 28px;
+        place-items: center;
+        color: var(--green);
+        font-size: 22px;
+        font-weight: 900;
+      }
+      .metrics,
+      .grid,
+      .bottom {
+        display: grid;
+        gap: 12px;
+      }
+      .metrics {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
         margin-bottom: 12px;
       }
-      .create-client-form {
+      .grid {
+        grid-template-columns: 0.95fr 1.05fr 1.35fr;
+      }
+      .bottom {
+        grid-template-columns: 1fr 1fr;
+        margin-top: 12px;
+      }
+      .metric,
+      .item,
+      .state-grid > div {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fbfcf8;
+        padding: 11px;
+      }
+      .metric strong {
+        display: block;
+        margin-top: 3px;
+        font-size: 26px;
+      }
+      .state-grid {
         display: grid;
-        grid-template-columns: minmax(0, 1fr) minmax(180px, 0.6fr) auto;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
         gap: 10px;
+      }
+      .state-grid strong {
+        display: block;
+        margin-top: 6px;
+        overflow-wrap: anywhere;
       }
       .stack {
         display: grid;
@@ -121,11 +169,10 @@
       }
       .item {
         width: 100%;
-        border: 1px solid var(--line);
-        border-radius: 8px;
-        background: #fbfcf8;
-        padding: 11px;
         text-align: left;
+      }
+      button.item {
+        min-height: 58px;
       }
       .item.active {
         border-color: var(--green);
@@ -135,11 +182,11 @@
       .item span {
         display: block;
       }
-      .item span,
-      .muted {
-        color: var(--muted);
-        font-size: 12px;
-        font-weight: 700;
+      .forms {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 8px;
+        margin-bottom: 12px;
       }
       .badge {
         display: inline-flex;
@@ -158,9 +205,6 @@
       }
       .badge.done {
         color: var(--green);
-      }
-      .badge.error {
-        color: var(--red);
       }
       .notice {
         margin-bottom: 12px;
@@ -194,16 +238,19 @@
         white-space: pre-wrap;
         overflow-wrap: anywhere;
       }
-      @media (max-width: 850px) {
+      @media (max-width: 900px) {
         header,
-        .row,
         .actions {
           align-items: stretch;
           flex-direction: column;
         }
+        .metrics,
         .grid,
         .bottom,
-        .create-client-form {
+        .state-grid {
+          grid-template-columns: 1fr;
+        }
+        .forms {
           grid-template-columns: 1fr;
         }
       }
@@ -228,40 +275,84 @@
 
       <div id="notice" class="notice" hidden></div>
 
-      <section class="panel create-client-panel">
-        <div class="panel-title">
-          <h2>新建副脑</h2>
+      <section class="panel system-panel">
+        <div class="panel-title split">
+          <div>
+            <div class="eyebrow">SYSTEM</div>
+            <h2>🧠 SYSTEM BRAIN</h2>
+          </div>
+          <span id="system-status" class="badge">连接中</span>
         </div>
-        <form id="create-client-form" class="create-client-form">
-          <input id="client-name" aria-label="副脑名称" placeholder="副脑名称" autocomplete="off" required />
-          <select id="client-project" aria-label="所属项目" required></select>
-          <button id="create-client" class="primary" type="submit">新建副脑</button>
-        </form>
+        <div class="state-grid">
+          <div>
+            <span>系统 ID</span>
+            <strong id="system-id">AI_MEMORY_SYSTEM</strong>
+          </div>
+          <div>
+            <span>系统模式</span>
+            <strong id="system-mode">云端外脑系统</strong>
+          </div>
+          <div>
+            <span>PROJECT 总数</span>
+            <strong id="system-project-count">0</strong>
+          </div>
+          <div>
+            <span>CLIENT 总数</span>
+            <strong id="system-client-count">0</strong>
+          </div>
+        </div>
+      </section>
+
+      <div class="hierarchy-arrow">↓</div>
+
+      <section class="metrics">
+        <div class="metric"><span>项目数</span><strong id="project-count">0</strong></div>
+        <div class="metric"><span>当前项目子脑</span><strong id="client-count">0</strong></div>
+        <div class="metric"><span>当前任务</span><strong id="task-count">0</strong></div>
+        <div class="metric"><span>事件流</span><strong id="event-count">0</strong></div>
       </section>
 
       <section class="grid">
         <section class="panel">
           <div class="panel-title">
-            <h2>项目列表</h2>
-            <span id="project-count" class="badge">0</span>
+            <h2>📦 PROJECT LIST</h2>
           </div>
+          <form id="create-project-form" class="forms">
+            <input id="project-name" aria-label="项目名称" placeholder="项目名称" autocomplete="off" required />
+            <button class="primary" type="submit">新建项目</button>
+          </form>
           <div id="projects" class="stack"></div>
         </section>
 
         <section class="panel">
-          <div class="panel-title">
-            <h2>子脑列表</h2>
-            <span id="client-count" class="badge">0</span>
+          <div class="panel-title split">
+            <div>
+              <div class="eyebrow">归属于 PROJECT</div>
+              <h2>👤 CLIENT LIST</h2>
+            </div>
+            <span id="selected-project-badge" class="badge">未选择项目</span>
           </div>
+          <form id="create-client-form" class="forms">
+            <input id="client-name" aria-label="副脑名称" placeholder="副脑名称" autocomplete="off" required disabled />
+            <button id="create-client" class="primary" type="submit" disabled>新建副脑</button>
+          </form>
           <div id="clients" class="stack"></div>
         </section>
 
         <section class="panel">
-          <div class="panel-title">
-            <h2>接管上下文</h2>
+          <div class="panel-title split">
+            <h2>当前 CLIENT</h2>
             <span id="client-status" class="badge">未连接</span>
           </div>
           <div class="stack">
+            <div class="item">
+              <span>所属 SYSTEM</span>
+              <strong id="current-system">AI_MEMORY_SYSTEM</strong>
+            </div>
+            <div class="item">
+              <span>所属 PROJECT</span>
+              <strong id="current-project">-</strong>
+            </div>
             <div class="item">
               <span>当前子脑</span>
               <strong id="current-client">-</strong>
@@ -270,16 +361,17 @@
               <span>当前任务</span>
               <strong id="current-task">-</strong>
             </div>
-            <pre id="handover">请选择一个子脑。</pre>
+            <pre id="handover">请先选择项目，再选择子脑。</pre>
           </div>
         </section>
       </section>
+
+      <div class="hierarchy-arrow">↓</div>
 
       <section class="bottom">
         <section class="panel">
           <div class="panel-title">
             <h2>任务队列</h2>
-            <span id="task-count" class="badge">0</span>
           </div>
           <div id="tasks" class="stack"></div>
         </section>
@@ -287,7 +379,6 @@
         <section class="panel">
           <div class="panel-title">
             <h2>事件流</h2>
-            <span id="event-count" class="badge">0</span>
           </div>
           <div id="events" class="stack"></div>
         </section>
@@ -299,11 +390,21 @@
       const REFRESH_INTERVAL_MS = 15000;
       const API_RETRY_ATTEMPTS = 2;
 
+      const defaultSystem = {
+        system_id: "AI_MEMORY_SYSTEM",
+        name: "SYSTEM BRAIN",
+        mode: "cloud_brain_os",
+        status: "connecting"
+      };
+
       const state = {
+        system: defaultSystem,
+        counts: { projects: 0, clients: 0, tasks: 0, events: 0 },
         projects: [],
         clients: [],
         taskQueue: [],
         eventStream: [],
+        selectedProjectId: new URLSearchParams(location.search).get("project_id") || "",
         selectedClientId: new URLSearchParams(location.search).get("client_id") || "",
         selectedStatePack: null,
         loading: false
@@ -313,13 +414,21 @@
 
       const statusText = {
         idle: "空闲",
-        pending: "待执行",
+        pending: "待处理",
         running: "执行中",
         done: "已完成",
+        blocked: "已阻塞",
+        failed: "失败",
+        connected: "已连接",
+        connecting: "连接中",
         account_ops: "采集模式",
         operation_ops: "执行模式",
-        evolution_ops: "优化模式"
+        evolution_ops: "优化模式",
+        operation_system: "运营系统",
+        cloud_brain_os: "云端外脑系统"
       };
+
+      const wait = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
 
       function notice(message, isError = false) {
         el("notice").hidden = !message;
@@ -329,7 +438,7 @@
         el("notice").style.color = isError ? "#8a2f28" : "#6b4b0e";
       }
 
-      async function api(path, options = {}) {
+      async function api(path, options = {}, optional = false) {
         const headers = {
           Accept: "application/json",
           ...(options.headers || {})
@@ -339,18 +448,35 @@
           headers["Content-Type"] = "application/json";
         }
 
-        const response = await fetch(`${API_BASE}${path}`, {
-          ...options,
-          headers
-        });
-        const text = await response.text();
-        const payload = text ? JSON.parse(text) : null;
+        for (let attempt = 0; attempt <= API_RETRY_ATTEMPTS; attempt += 1) {
+          try {
+            const response = await fetch(`${API_BASE}${path}`, { ...options, headers });
+            const text = await response.text();
+            let payload = null;
 
-        if (!response.ok) {
-          throw new Error(payload?.error || payload?.message || response.statusText);
+            try {
+              payload = text ? JSON.parse(text) : null;
+            } catch {
+              payload = null;
+            }
+
+            if (!response.ok || payload?.success === false) {
+              throw new Error(payload?.error || "外脑连接中...");
+            }
+
+            return payload ?? {};
+          } catch (error) {
+            if (attempt < API_RETRY_ATTEMPTS) {
+              await wait(500 * (attempt + 1));
+            } else if (optional) {
+              return null;
+            } else {
+              throw error;
+            }
+          }
         }
 
-        return payload;
+        return optional ? null : {};
       }
 
       function asArray(payload, keys) {
@@ -370,82 +496,8 @@
         return project?.project_id || project?.id || "";
       }
 
-      async function loadDashboard() {
-        state.loading = true;
-        notice("");
-        renderLoading();
-
-        try {
-          const [projectsPayload, clientsPayload, eventsPayload] = await Promise.all([
-            api("/projects"),
-            api("/clients"),
-            api("/events")
-          ]);
-
-          state.projects = asArray(projectsPayload, ["projects", "project_brains"]);
-          state.clients = asArray(clientsPayload, ["clients", "client_brains"]);
-          state.eventStream = asArray(eventsPayload, ["events", "event_stream", "event_history"]);
-
-          if (!state.selectedClientId && state.clients[0]) {
-            state.selectedClientId = getClientId(state.clients[0]);
-          }
-
-          if (state.selectedClientId) {
-            await selectClient(state.selectedClientId, false);
-          } else {
-            state.selectedStatePack = null;
-            state.taskQueue = [];
-            render();
-          }
-
-          notice("外脑 API 已同步");
-        } catch (error) {
-          notice("外脑连接中...");
-          render();
-        } finally {
-          state.loading = false;
-        }
-      }
-
-      async function selectClient(clientId, showNotice = true) {
-        state.selectedClientId = clientId;
-        state.loading = true;
-        if (showNotice) notice("");
-
-        try {
-          const [statePackPayload, tasksPayload] = await Promise.all([
-            api(`/client/${encodeURIComponent(clientId)}`),
-            api(`/tasks?client_id=${encodeURIComponent(clientId)}`)
-          ]);
-
-          const clientState = statePackPayload.client_state || statePackPayload.client || statePackPayload.state || {};
-          const taskQueue = asArray(statePackPayload, ["task_queue", "tasks"]);
-          const eventStream = asArray(statePackPayload, ["event_stream", "event_history", "events"]);
-
-          state.selectedStatePack = {
-            ...statePackPayload,
-            client_state: clientState,
-            task_queue: taskQueue.length ? taskQueue : asArray(tasksPayload, ["task_queue", "tasks"]),
-            event_stream: eventStream.length
-              ? eventStream
-              : state.eventStream.filter((event) => event.client_id === clientId)
-          };
-          state.taskQueue = state.selectedStatePack.task_queue;
-          state.eventStream = state.selectedStatePack.event_stream;
-
-          render();
-          if (showNotice) notice(`已接管子脑：${clientId}`);
-        } catch (error) {
-          notice("外脑连接中...");
-          render();
-        } finally {
-          state.loading = false;
-        }
-      }
-
-      function renderLoading() {
-        renderProjectOptions();
-        el("api-base").textContent = `外脑接口地址：${API_BASE}`;
+      function selectedProject() {
+        return state.projects.find((project) => getProjectId(project) === state.selectedProjectId) || null;
       }
 
       function selectedClient() {
@@ -454,279 +506,68 @@
         return state.clients.find((client) => getClientId(client) === state.selectedClientId) || null;
       }
 
-      function renderProjectOptions() {
-        const projectSelect = el("client-project");
-        if (!projectSelect) return;
-
-        if (!state.projects.length) {
-          projectSelect.innerHTML = `<option value="">暂无项目</option>`;
-          projectSelect.disabled = true;
-          return;
-        }
-
-        const previousValue = projectSelect.value;
-        projectSelect.disabled = false;
-        projectSelect.innerHTML = state.projects
-          .map((projectItem) => {
-            const projectId = getProjectId(projectItem);
-            const label = projectItem.name || projectId || "-";
-            return `<option value="${escapeHtml(projectId)}">${escapeHtml(label)}</option>`;
-          })
-          .join("");
-
-        projectSelect.value = state.projects.some((projectItem) => getProjectId(projectItem) === previousValue)
-          ? previousValue
-          : getProjectId(state.projects[0]);
-      }
-
-      function render() {
-        const client = selectedClient();
-        const project = state.projects.find((item) => getProjectId(item) === client?.project_id);
-        const tasks = state.taskQueue || [];
-        const events = state.eventStream || [];
-
-        el("api-base").textContent = `外脑接口地址：${API_BASE}`;
-        renderProjectOptions();
-        el("project-count").textContent = String(state.projects.length);
-        el("client-count").textContent = String(state.clients.length);
-        el("task-count").textContent = String(tasks.length);
-        el("event-count").textContent = String(events.length);
-
-        el("projects").innerHTML =
-          state.projects
-            .map(
-              (projectItem) => `<div class="item"><strong>${escapeHtml(
-                projectItem.name || projectItem.project_id || projectItem.id || "-"
-              )}</strong><span>${escapeHtml(getProjectId(projectItem) || "-")}</span></div>`
-            )
-            .join("") || `<div class="item"><span>暂无项目数据</span></div>`;
-
-        el("clients").innerHTML =
-          state.clients
-            .map((clientItem) => {
-              const clientId = getClientId(clientItem);
-              return `<button class="item ${clientId === state.selectedClientId ? "active" : ""}" data-client="${escapeHtml(
-                clientId
-              )}" type="button"><strong>${escapeHtml(clientItem.name || clientId || "-")}</strong><span>${escapeHtml(
-                clientId || "-"
-              )}</span></button>`;
-            })
-            .join("") || `<div class="item"><span>暂无子脑数据</span></div>`;
-
-        document.querySelectorAll("[data-client]").forEach((button) => {
-          button.addEventListener("click", () => {
-            void selectClient(button.dataset.client);
-          });
-        });
-
-        el("current-client").textContent = client ? `${client.name || getClientId(client)} / ${getClientId(client)}` : "-";
-        el("current-task").textContent = client?.current_task || state.selectedStatePack?.current_task || "空闲";
-        el("client-status").textContent =
-          statusText[state.selectedStatePack?.current_mode || client?.status] ||
-          state.selectedStatePack?.current_mode ||
-          client?.status ||
-          "未连接";
-        el("handover").textContent = client ? buildHandoverText(project, client, tasks, events) : "请选择一个子脑。";
-
-        el("tasks").innerHTML =
-          tasks
-            .map(
-              (task) => `<div class="item"><strong>${escapeHtml(
-                task.action || task.current_task || task.task_id || "-"
-              )}</strong><span class="badge ${escapeHtml(task.status || "")}">${escapeHtml(
-                statusText[task.status] || task.status || "-"
-              )}</span></div>`
-            )
-            .join("") || `<div class="item"><span>暂无任务队列数据</span></div>`;
-
-        el("events").innerHTML =
-          events
-            .map(
-              (event) => `<div class="item"><strong>${escapeHtml(event.type || event.event_id || "-")}</strong><span>${escapeHtml(
-                event.timestamp ? new Date(event.timestamp).toLocaleString() : "-"
-              )}</span></div>`
-            )
-            .join("") || `<div class="item"><span>暂无事件流数据</span></div>`;
-      }
-
-      function buildHandoverText(project, client, tasks, events) {
-        const statePack = state.selectedStatePack || {};
-        return `# Brain Hub 外脑接管上下文
-
-外脑接口地址 = ${API_BASE}
-
-client_id = ${getClientId(client)}
-project_id = ${client.project_id || project?.project_id || ""}
-current_mode = ${statePack.current_mode || client.status || ""}
-
-client_state:
-${JSON.stringify(statePack.client_state || client, null, 2)}
-
-task_queue:
-${JSON.stringify(tasks, null, 2)}
-
-event_stream:
-${JSON.stringify(events, null, 2)}
-
-AI 执行规则:
-1. READ API
-2. GET STATE
-3. GET TASK
-4. EXECUTE
-5. WRITE EVENT
-6. UPDATE TASK
-7. REPEAT
-
-强制规则:
-- 不允许重置状态。
-- 不允许使用本地 JSON 或本地模拟状态。
-- 必须继续外脑 API 返回的 task_queue。
-- 所有执行结果必须写回外脑 API。`;
-      }
-
-      function escapeHtml(value) {
-        return String(value ?? "")
-          .replaceAll("&", "&amp;")
-          .replaceAll("<", "&lt;")
-          .replaceAll(">", "&gt;")
-          .replaceAll('"', "&quot;")
-          .replaceAll("'", "&#039;");
-      }
-
-      el("refresh").addEventListener("click", () => {
-        void loadDashboard();
-      });
-
-      el("create-client-form").addEventListener("submit", async (event) => {
-        event.preventDefault();
-        const clientName = el("client-name").value.trim();
-        const projectId = el("client-project").value;
-
-        if (!clientName || !projectId) {
-          notice("请填写副脑名称并选择所属项目");
-          return;
-        }
-
+      async function loadDashboard(projectOverride = "", clientOverride = "") {
         state.loading = true;
         notice("外脑连接中...");
+        render();
 
-        try {
-          await api("/client/create", {
-            method: "POST",
-            body: JSON.stringify({
-              client_name: clientName,
-              project_id: projectId
-            })
-          });
-          el("client-name").value = "";
-          notice("副脑已创建");
-          await loadDashboard();
-        } catch {
-          notice("外脑连接中...");
-          render();
-        } finally {
-          state.loading = false;
-        }
-      });
+        const [systemPayload, projectsPayload, eventsPayload] = await Promise.all([
+          api("/system", {}, true),
+          api("/projects", {}, true),
+          api("/events", {}, true)
+        ]);
 
-      el("copy").addEventListener("click", async () => {
-        await navigator.clipboard.writeText(el("handover").textContent);
-        notice("接管上下文已复制");
-      });
+        state.system = systemPayload?.system || defaultSystem;
+        state.counts = systemPayload?.counts || state.counts;
+        state.projects = asArray(projectsPayload, ["projects", "project_brains"]);
+        state.eventStream = asArray(eventsPayload, ["events", "event_stream", "event_history"]);
 
-      const wait = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
+        const nextProjectId =
+          projectOverride && state.projects.some((project) => getProjectId(project) === projectOverride)
+            ? projectOverride
+            : state.selectedProjectId && state.projects.some((project) => getProjectId(project) === state.selectedProjectId)
+              ? state.selectedProjectId
+              : getProjectId(state.projects[0]);
 
-      api = async function safeApi(path, options = {}) {
-        const headers = {
-          Accept: "application/json",
-          ...(options.headers || {})
-        };
+        state.selectedProjectId = nextProjectId || "";
 
-        if (options.body && !headers["Content-Type"]) {
-          headers["Content-Type"] = "application/json";
-        }
-
-        for (let attempt = 0; attempt <= API_RETRY_ATTEMPTS; attempt += 1) {
-          try {
-            const response = await fetch(`${API_BASE}${path}`, {
-              ...options,
-              headers
-            });
-            const text = await response.text();
-            let payload = null;
-
-            try {
-              payload = text ? JSON.parse(text) : null;
-            } catch {
-              payload = null;
-            }
-
-            if (!response.ok) {
-              throw new Error("外脑连接中...");
-            }
-
-            return payload ?? {};
-          } catch {
-            if (attempt < API_RETRY_ATTEMPTS) {
-              await wait(500 * (attempt + 1));
-            }
-          }
-        }
-
-        throw new Error("外脑连接中...");
-      };
-
-      renderLoading = function safeRenderLoading() {
-        renderProjectOptions();
-        el("api-base").textContent = `外脑接口地址：${API_BASE}`;
-        if (!state.projects.length) el("projects").innerHTML = `<div class="item"><span>外脑连接中...</span></div>`;
-        if (!state.clients.length) el("clients").innerHTML = `<div class="item"><span>外脑连接中...</span></div>`;
-        if (!state.taskQueue.length) el("tasks").innerHTML = `<div class="item"><span>外脑连接中...</span></div>`;
-        if (!state.eventStream.length) el("events").innerHTML = `<div class="item"><span>外脑连接中...</span></div>`;
-      };
-
-      loadDashboard = async function safeLoadDashboard() {
-        state.loading = true;
-        notice("外脑连接中...");
-        renderLoading();
-
-        try {
-          const [projectsPayload, clientsPayload, eventsPayload] = await Promise.all([
-            api("/projects"),
-            api("/clients"),
-            api("/events")
-          ]);
-
-          state.projects = asArray(projectsPayload, ["projects", "project_brains"]);
+        if (state.selectedProjectId) {
+          const clientsPayload = await api(`/clients?project_id=${encodeURIComponent(state.selectedProjectId)}`, {}, true);
           state.clients = asArray(clientsPayload, ["clients", "client_brains"]);
-          state.eventStream = asArray(eventsPayload, ["events", "event_stream", "event_history"]);
-
-          if (!state.selectedClientId && state.clients[0]) {
-            state.selectedClientId = getClientId(state.clients[0]);
-          }
-
-          if (state.selectedClientId) {
-            await selectClient(state.selectedClientId, false);
-          } else {
-            state.selectedStatePack = null;
-            state.taskQueue = [];
-            render();
-          }
-
-          notice("外脑 API 已同步");
-        } catch {
-          state.projects = Array.isArray(state.projects) ? state.projects : [];
-          state.clients = Array.isArray(state.clients) ? state.clients : [];
-          state.taskQueue = Array.isArray(state.taskQueue) ? state.taskQueue : [];
-          state.eventStream = Array.isArray(state.eventStream) ? state.eventStream : [];
-          notice("外脑连接中...");
-          render();
-        } finally {
-          state.loading = false;
+        } else {
+          state.clients = [];
         }
-      };
 
-      selectClient = async function safeSelectClient(clientId, showNotice = true) {
+        const nextClientId =
+          clientOverride && state.clients.some((client) => getClientId(client) === clientOverride)
+            ? clientOverride
+            : state.selectedClientId && state.clients.some((client) => getClientId(client) === state.selectedClientId)
+              ? state.selectedClientId
+              : getClientId(state.clients[0]);
+
+        state.selectedClientId = nextClientId || "";
+
+        if (state.selectedClientId) {
+          await selectClient(state.selectedClientId, false);
+        } else {
+          state.selectedStatePack = null;
+          state.taskQueue = [];
+          render();
+        }
+
+        notice(systemPayload || projectsPayload ? "外脑 API 已同步" : "外脑连接中...");
+        state.loading = false;
+      }
+
+      async function selectProject(projectId) {
+        state.selectedProjectId = projectId;
+        state.selectedClientId = "";
+        state.selectedStatePack = null;
+        state.taskQueue = [];
+        await loadDashboard(projectId, "");
+      }
+
+      async function selectClient(clientId, showNotice = true) {
         state.selectedClientId = clientId;
         state.loading = true;
         if (showNotice) notice("外脑连接中...");
@@ -753,18 +594,221 @@ AI 执行规则:
           state.eventStream = state.selectedStatePack.event_stream;
 
           render();
-          if (showNotice) notice(`已接管子脑：${clientId}`);
+          if (showNotice) notice(`已加载子脑：${clientId}`);
         } catch {
-          state.taskQueue = Array.isArray(state.taskQueue) ? state.taskQueue : [];
-          state.eventStream = Array.isArray(state.eventStream) ? state.eventStream : [];
+          state.taskQueue = [];
           notice("外脑连接中...");
           render();
         } finally {
           state.loading = false;
         }
-      };
+      }
 
-      renderLoading();
+      async function createProject(event) {
+        event.preventDefault();
+        const projectName = el("project-name").value.trim();
+
+        if (!projectName) {
+          notice("请先填写项目名称");
+          return;
+        }
+
+        notice("外脑连接中...");
+        try {
+          const result = await api("/project/create", {
+            method: "POST",
+            body: JSON.stringify({ project_name: projectName })
+          });
+          el("project-name").value = "";
+          await loadDashboard(result.project?.project_id || "", "");
+          notice(result.created ? "项目已创建" : "项目已存在，已切换到该项目");
+        } catch {
+          notice("外脑连接中...");
+        }
+      }
+
+      async function createClient(event) {
+        event.preventDefault();
+        const clientName = el("client-name").value.trim();
+
+        if (!state.selectedProjectId) {
+          notice("请先选择或创建项目");
+          return;
+        }
+
+        if (!clientName) {
+          notice("请填写副脑名称");
+          return;
+        }
+
+        notice("外脑连接中...");
+        try {
+          const result = await api("/client/create", {
+            method: "POST",
+            body: JSON.stringify({
+              client_name: clientName,
+              project_id: state.selectedProjectId
+            })
+          });
+          el("client-name").value = "";
+          await loadDashboard(state.selectedProjectId, result.client?.client_id || "");
+          notice("副脑已创建");
+        } catch {
+          notice("外脑连接中...");
+        }
+      }
+
+      function render() {
+        const project = selectedProject();
+        const client = selectedClient();
+        const tasks = state.taskQueue || [];
+        const events = state.selectedStatePack?.event_stream || state.eventStream || [];
+
+        el("api-base").textContent = `外脑接口地址：${API_BASE}`;
+        el("system-status").textContent = statusText[state.system.status] || state.system.status || "连接中";
+        el("system-id").textContent = state.system.system_id || "AI_MEMORY_SYSTEM";
+        el("system-mode").textContent = statusText[state.system.mode] || state.system.mode || "云端外脑系统";
+        el("system-project-count").textContent = String(state.counts.projects || state.projects.length);
+        el("system-client-count").textContent = String(state.counts.clients || 0);
+        el("project-count").textContent = String(state.projects.length);
+        el("client-count").textContent = String(state.clients.length);
+        el("task-count").textContent = String(tasks.length);
+        el("event-count").textContent = String(events.length);
+        el("selected-project-badge").textContent = project ? getProjectId(project) : "未选择项目";
+
+        el("projects").innerHTML =
+          state.projects
+            .map((projectItem) => {
+              const projectId = getProjectId(projectItem);
+              return `<button class="item ${projectId === state.selectedProjectId ? "active" : ""}" data-project="${escapeHtml(
+                projectId
+              )}" type="button"><strong>${escapeHtml(projectItem.name || projectId || "-")}</strong><span>${escapeHtml(
+                projectId || "-"
+              )}</span></button>`;
+            })
+            .join("") || `<div class="item"><span>暂无项目，请先新建项目</span></div>`;
+
+        document.querySelectorAll("[data-project]").forEach((button) => {
+          button.addEventListener("click", () => {
+            void selectProject(button.dataset.project);
+          });
+        });
+
+        el("client-name").disabled = !state.selectedProjectId;
+        el("create-client").disabled = !state.selectedProjectId;
+        el("clients").innerHTML =
+          state.clients
+            .map((clientItem) => {
+              const clientId = getClientId(clientItem);
+              return `<button class="item ${clientId === state.selectedClientId ? "active" : ""}" data-client="${escapeHtml(
+                clientId
+              )}" type="button"><strong>${escapeHtml(clientItem.name || clientId || "-")}</strong><span>${escapeHtml(
+                clientId || "-"
+              )}</span></button>`;
+            })
+            .join("") ||
+          `<div class="item"><span>${state.selectedProjectId ? "当前项目暂无子脑" : "请先选择或创建项目"}</span></div>`;
+
+        document.querySelectorAll("[data-client]").forEach((button) => {
+          button.addEventListener("click", () => {
+            void selectClient(button.dataset.client);
+          });
+        });
+
+        el("current-system").textContent = state.system.system_id || "AI_MEMORY_SYSTEM";
+        el("current-project").textContent = project ? `${project.name || getProjectId(project)} / ${getProjectId(project)}` : "-";
+        el("current-client").textContent = client ? `${client.name || getClientId(client)} / ${getClientId(client)}` : "-";
+        el("current-task").textContent = client?.current_task || state.selectedStatePack?.current_task || "空闲";
+        el("client-status").textContent =
+          statusText[state.selectedStatePack?.current_mode || client?.status] ||
+          state.selectedStatePack?.current_mode ||
+          client?.status ||
+          "未连接";
+        el("handover").textContent = client ? buildHandoverText(project, client, tasks, events) : "请先选择项目，再选择子脑。";
+
+        el("tasks").innerHTML =
+          tasks
+            .map(
+              (task) => `<div class="item"><strong>${escapeHtml(
+                task.action || task.current_task || task.task_id || "-"
+              )}</strong><span class="badge ${escapeHtml(task.status || "")}">${escapeHtml(
+                statusText[task.status] || task.status || "-"
+              )}</span></div>`
+            )
+            .join("") || `<div class="item"><span>当前子脑暂无任务</span></div>`;
+
+        el("events").innerHTML =
+          events
+            .map(
+              (event) => `<div class="item"><strong>${escapeHtml(event.type || event.event_id || "-")}</strong><span>${escapeHtml(
+                event.timestamp ? new Date(event.timestamp).toLocaleString() : "-"
+              )}</span></div>`
+            )
+            .join("") || `<div class="item"><span>当前子脑暂无事件</span></div>`;
+      }
+
+      function buildHandoverText(project, client, tasks, events) {
+        const statePack = state.selectedStatePack || {};
+        return `# Brain Hub 外脑接管上下文
+
+system_id = ${state.system.system_id || "AI_MEMORY_SYSTEM"}
+project_id = ${client.project_id || project?.project_id || ""}
+client_id = ${getClientId(client)}
+current_mode = ${statePack.current_mode || client.status || ""}
+外脑接口地址 = ${API_BASE}
+
+client_state:
+${JSON.stringify(statePack.client_state || client, null, 2)}
+
+task_queue:
+${JSON.stringify(tasks, null, 2)}
+
+event_stream:
+${JSON.stringify(events, null, 2)}
+
+AI 执行规则:
+1. READ API
+2. GET STATE
+3. GET TASK
+4. EXECUTE
+5. WRITE EVENT
+6. UPDATE TASK
+7. REPEAT
+
+强制规则:
+- 不允许重置状态。
+- 不允许 client 脱离 project。
+- 必须继续外脑 API 返回的 task_queue。
+- 所有执行结果必须写回外脑 API。`;
+      }
+
+      function escapeHtml(value) {
+        return String(value ?? "")
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#039;");
+      }
+
+      el("refresh").addEventListener("click", () => {
+        void loadDashboard();
+      });
+
+      el("create-project-form").addEventListener("submit", (event) => {
+        void createProject(event);
+      });
+
+      el("create-client-form").addEventListener("submit", (event) => {
+        void createClient(event);
+      });
+
+      el("copy").addEventListener("click", async () => {
+        await navigator.clipboard.writeText(el("handover").textContent);
+        notice("接管上下文已复制");
+      });
+
+      render();
       void loadDashboard();
       window.setInterval(() => {
         void loadDashboard();
