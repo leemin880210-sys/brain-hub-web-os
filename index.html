@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Brain Hub Web OS</title>
+    <title>Brain Hub 涓枃鐗?/title>
     <style>
       :root {
         --bg: #f7f8f3;
@@ -192,18 +192,18 @@
     <main>
       <header>
         <div>
-          <div class="muted">Cloud Runtime</div>
-          <h1>Brain Hub Web OS</h1>
+          <div class="muted">浜戠澶栬剳杩愯绯荤粺</div>
+          <h1>Brain Hub 涓枃鐗?/h1>
         </div>
         <div class="actions">
-          <button id="connect">Connect</button>
-          <button id="refresh">Refresh</button>
+          <button id="connect">杩炴帴浜戠</button>
+          <button id="refresh">鍒锋柊</button>
         </div>
       </header>
 
       <section class="panel">
         <div class="row">
-          <input id="supabase-url" placeholder="Supabase URL, e.g. https://project.supabase.co" />
+          <input id="supabase-url" placeholder="Supabase 鍦板潃锛屼緥濡?https://project.supabase.co" />
           <input id="supabase-key" placeholder="Supabase anon key" />
         </div>
       </section>
@@ -213,37 +213,37 @@
       <section class="grid" style="margin-top: 12px">
         <section class="panel">
           <div class="panel-title">
-            <h2>Projects</h2>
+            <h2>椤圭洰鍒楄〃</h2>
           </div>
           <div id="projects" class="stack"></div>
         </section>
 
         <section class="panel">
           <div class="panel-title">
-            <h2>Clients</h2>
+            <h2>瀛愯剳鍒楄〃</h2>
           </div>
           <div id="clients" class="stack"></div>
         </section>
 
         <section class="panel">
           <div class="panel-title">
-            <h2>Handover</h2>
-            <span id="client-status" class="badge">idle</span>
+            <h2>AI 鎺ョ</h2>
+            <span id="client-status" class="badge">绌洪棽</span>
           </div>
           <div class="stack">
             <div class="item">
-              <span>Client</span>
+              <span>褰撳墠瀛愯剳</span>
               <strong id="current-client">-</strong>
             </div>
             <div class="item">
-              <span>Current Task</span>
-              <strong id="current-task">Idle</strong>
+              <span>褰撳墠浠诲姟</span>
+              <strong id="current-task">绌洪棽</strong>
             </div>
             <div class="actions">
-              <button id="run" class="primary">Run Cycle</button>
-              <button id="copy">Copy Handover</button>
+              <button id="run" class="primary">鎵ц寰幆</button>
+              <button id="copy">澶嶅埗鎺ョ鍗忚</button>
             </div>
-            <pre id="handover">No client selected</pre>
+            <pre id="handover">鏈€夋嫨瀛愯剳</pre>
           </div>
         </section>
       </section>
@@ -251,18 +251,18 @@
       <section class="bottom">
         <section class="panel">
           <div class="panel-title">
-            <h2>Task Queue</h2>
+            <h2>浠诲姟闃熷垪</h2>
           </div>
           <form id="task-form" class="task-form">
-            <input id="task-action" placeholder="Task action" />
-            <button type="submit">Add</button>
+            <input id="task-action" placeholder="杈撳叆浠诲姟鍐呭" />
+            <button type="submit">娣诲姞</button>
           </form>
           <div id="tasks" class="stack" style="margin-top: 10px"></div>
         </section>
 
         <section class="panel">
           <div class="panel-title">
-            <h2>Event Stream</h2>
+            <h2>浜嬩欢娴?/h2>
           </div>
           <div id="events" class="stack"></div>
         </section>
@@ -282,6 +282,16 @@
 
       const el = (id) => document.getElementById(id);
 
+      const statusText = {
+        idle: "绌洪棽",
+        pending: "寰呮墽琛?,
+        running: "鎵ц涓?,
+        done: "宸插畬鎴?,
+        account_ops: "閲囬泦妯″紡",
+        operation_ops: "鎵ц妯″紡",
+        evolution_ops: "浼樺寲妯″紡"
+      };
+
       function notice(message) {
         el("notice").hidden = !message;
         el("notice").textContent = message || "";
@@ -298,7 +308,7 @@
       }
 
       async function rest(path, options = {}) {
-        if (!state.url || !state.key) throw new Error("Supabase URL and anon key are required");
+        if (!state.url || !state.key) throw new Error("璇峰～鍐?Supabase 鍦板潃鍜?anon key");
         const response = await fetch(`${state.url.replace(/\\/$/, "")}/rest/v1/${path}`, {
           ...options,
           headers: headers(options.headers || {})
@@ -359,17 +369,17 @@
         const project = state.projects.find((item) => item.project_id === client?.project_id);
 
         el("current-client").textContent = client ? `${client.name} / ${client.client_id}` : "-";
-        el("current-task").textContent = client?.current_task || "Idle";
-        el("client-status").textContent = client?.status || "idle";
+        el("current-task").textContent = client?.current_task || "绌洪棽";
+        el("client-status").textContent = statusText[client?.status] || "绌洪棽";
         el("handover").textContent = client
           ? buildHandoverText(project, client, tasks, events)
-          : "No client selected";
+          : "鏈€夋嫨瀛愯剳";
 
         el("tasks").innerHTML = tasks
           .map(
             (task) => `<div class="item"><strong>${escapeHtml(task.action)}</strong><span class="badge ${
               task.status
-            }">${escapeHtml(task.status)}</span></div>`
+            }">${escapeHtml(statusText[task.status] || task.status)}</span></div>`
           )
           .join("");
         el("events").innerHTML = events
@@ -382,12 +392,12 @@
       }
 
       function buildHandoverText(project, client, tasks, events) {
-        return `# Brain Hub Web OS Handover Protocol
+        return `# Brain Hub 涓枃鎺ョ鍗忚
 
 client_id = ${client.client_id}
 project_id = ${client.project_id}
 
-current_state:
+褰撳墠鐘舵€?
 ${JSON.stringify(
   {
     client_id: client.client_id,
@@ -400,16 +410,14 @@ ${JSON.stringify(
   2
 )}
 
-task_queue:
+浠诲姟闃熷垪:
 ${JSON.stringify(tasks, null, 2)}
 
-event_history:
+浜嬩欢鍘嗗彶:
 ${JSON.stringify(events, null, 2)}
 
-RULES:
-- Do not reset state.
-- Continue existing task queue.
-- Write updates to Supabase cloud.`;
+鎵ц瑙勫垯:
+- 涓嶅厑璁搁噸缃姸鎬併€?- 蹇呴』缁х画鐜版湁浠诲姟闃熷垪銆?- 鎵€鏈夋洿鏂板繀椤诲啓鍥?Supabase 浜戠銆俙;
       }
 
       async function addEvent(clientId, input, output) {
@@ -445,7 +453,7 @@ RULES:
         if (!task) {
           await setClientTask(client.client_id, "");
           await addEvent(client.client_id, { loop: ["READ_STATE", "GET_TASK"] }, { status: "idle" });
-          notice("Runtime idle");
+          notice("褰撳墠浠诲姟闃熷垪涓虹┖");
           await loadAll();
           return;
         }
@@ -462,7 +470,7 @@ RULES:
         );
         await setClientTask(client.client_id, next?.action || "");
         await addEvent(client.client_id, { loop: ["WRITE_EVENT", "UPDATE_STATE"], task: done }, { status: "done" });
-        notice("Runtime done");
+        notice("鎵ц寰幆宸插畬鎴?);
         await loadAll();
       }
 
@@ -480,7 +488,7 @@ RULES:
         state.key = el("supabase-key").value.trim();
         try {
           await loadAll();
-          notice("Connected");
+          notice("浜戠杩炴帴鎴愬姛");
         } catch (error) {
           notice(error.message);
         }
@@ -504,7 +512,7 @@ RULES:
 
       el("copy").addEventListener("click", async () => {
         await navigator.clipboard.writeText(el("handover").textContent);
-        notice("Handover copied");
+        notice("鎺ョ鍗忚宸插鍒?);
       });
 
       el("task-form").addEventListener("submit", async (event) => {
@@ -519,7 +527,7 @@ RULES:
           });
           el("task-action").value = "";
           await loadAll();
-          notice("Task queued");
+          notice("浠诲姟宸插姞鍏ラ槦鍒?);
         } catch (error) {
           notice(error.message);
         }
