@@ -56,7 +56,7 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const payload = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    throw new Error(typeof payload.error === "string" ? payload.error : "Request failed");
+    throw new Error(typeof payload.error === "string" ? payload.error : "请求失败");
   }
 
   return payload as T;
