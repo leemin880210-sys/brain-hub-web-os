@@ -1,34 +1,37 @@
 # Brain Hub Web OS
 
-Web(A) visual console for an external Brain API(B).
+Frontend UI plus Backend API server for the AI external brain.
 
-No project, client, task, event, or state data is stored locally. The UI calls Web(A) API routes, and those routes proxy the external AI_MEMORY_SYSTEM API.
+The UI does not use local JSON, fixture data, or static state. It calls the backend API routes, and those API routes read and write Supabase.
+
+## Data Flow
+
+```text
+Web UI -> /api/* -> Supabase -> AI external brain
+```
 
 ## Environment
 
 ```env
-BRAIN_API_BASE=https://your-brain-api-domain.com/api
-BRAIN_API_TOKEN=
-NEXT_PUBLIC_APP_URL=https://your-web-domain
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+NEXT_PUBLIC_APP_URL=https://your-api-domain
 ```
 
-## Web(A) API Layer
+## Required API
 
-- `GET /api/projects` -> B `/projects`
-- `GET /api/clients` -> B `/clients`
-- `GET /api/client` -> B `/clients` or B `/client/:client_id`
-- `GET /api/client/:client_id` -> B `/client/:client_id`
-- `GET /api/tasks?client_id=A001` -> B `/tasks?client_id=A001`
-- `GET /api/events` -> B `/events`
-- `POST /api/handover` -> B `/handover`
+- `GET /api/projects`
+- `GET /api/clients`
+- `GET /api/client/:id`
+- `GET /api/tasks`
+- `GET /api/events`
+- `POST /api/handover`
 
-## UI Handover Flow
-
-Clicking a client calls:
+Client takeover in the UI calls:
 
 ```text
 GET /api/client/:id
 GET /api/tasks?client_id=:id
+GET /api/events?client_id=:id
+POST /api/handover
 ```
-
-The UI displays state, task queue, event stream, and a copyable AI handover context.

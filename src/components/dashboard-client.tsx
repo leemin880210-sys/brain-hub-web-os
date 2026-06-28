@@ -108,9 +108,10 @@ export function DashboardClient() {
   const [origin, setOrigin] = useState("");
 
   const loadClientContext = useCallback(async (clientId: string) => {
-    const [clientPayload, tasksPayload] = await Promise.all([
+    const [clientPayload, tasksPayload, eventsPayload] = await Promise.all([
       fetchJson<ClientStatePack>(`/api/client/${encodeURIComponent(clientId)}`),
-      fetchJson<unknown>(`/api/tasks?client_id=${encodeURIComponent(clientId)}`)
+      fetchJson<unknown>(`/api/tasks?client_id=${encodeURIComponent(clientId)}`),
+      fetchJson<unknown>(`/api/events?client_id=${encodeURIComponent(clientId)}`)
     ]);
 
     setStatePack({
@@ -119,7 +120,10 @@ export function DashboardClient() {
         clientPayload.task_queue?.length || clientPayload.tasks?.length
           ? clientPayload.task_queue ?? clientPayload.tasks
           : asArray<TaskQueueItem>(tasksPayload, ["task_queue", "tasks"]),
-      event_stream: clientPayload.event_stream ?? clientPayload.event_history ?? clientPayload.events ?? []
+      event_stream:
+        clientPayload.event_stream?.length || clientPayload.event_history?.length || clientPayload.events?.length
+          ? clientPayload.event_stream ?? clientPayload.event_history ?? clientPayload.events
+          : asArray<EventStreamItem>(eventsPayload, ["event_stream", "event_history", "events"])
     });
   }, []);
 
@@ -127,7 +131,18 @@ export function DashboardClient() {
     setLoading(true);
     setNotice("");
     try {
-      const overview = await fetchJson<OverviewPayload>("/api/overview");
+      const [projectsPayload, clientsPayload, tasksPayload, eventsPayload] = await Promise.all([
+        fetchJson<unknown>("/api/projects"),
+        fetchJson<unknown>("/api/clients"),
+        fetchJson<unknown>("/api/tasks"),
+        fetchJson<unknown>("/api/events")
+      ]);
+      const overview: OverviewPayload = {
+        projects: asArray<Project>(projectsPayload, ["projects"]),
+        clients: asArray<ClientBrain>(clientsPayload, ["clients"]),
+        tasks: asArray<TaskQueueItem>(tasksPayload, ["tasks", "task_queue"]),
+        recent_events: asArray<EventStreamItem>(eventsPayload, ["events", "event_stream", "event_history"])
+      };
       setData(overview);
       const nextClientId = selectedClientId || overview.clients[0]?.client_id || "";
       setSelectedClientId(nextClientId);
@@ -135,7 +150,7 @@ export function DashboardClient() {
         await loadClientContext(nextClientId);
       }
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "External brain API unavailable");
+      setNotice(error instanceof Error ? error.message : "Backend API unavailable");
     } finally {
       setLoading(false);
     }
@@ -233,18 +248,23 @@ export function DashboardClient() {
   async function copyHandoverContext() {
     if (!selectedClient) return;
 
-    const handoverText = JSON.stringify(
-      {
-        client_state: selectedClient,
-        task_queue: clientTasks,
-        event_stream: clientEvents
-      },
-      null,
-      2
-    );
+    setBusy(true);
+    setNotice("");
+    try {
+      const handover = await fetchJson<Record<string, unknown>>("/api/handover", {
+        method: "POST",
+        body: JSON.stringify({ client_id: selectedClient.client_id })
+      });
+      const handoverText =
+        typeof handover.handover_text === "string" ? handover.handover_text : JSON.stringify(handover, null, 2);
 
-    await navigator.clipboard.writeText(handoverText);
-    setNotice("AI handover context copied");
+      await navigator.clipboard.writeText(handoverText);
+      setNotice("AI handover context copied");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Failed to create handover context");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function selectClient(clientId: string) {

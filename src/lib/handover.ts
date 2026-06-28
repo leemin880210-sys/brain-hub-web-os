@@ -10,7 +10,7 @@ type HandoverInput = {
 };
 
 export function buildHandoverText(input: HandoverInput) {
-  const runtimeEndpoint = `${input.baseUrl}/api/runtime/step`;
+  const executeEndpoint = `${input.baseUrl}/api/execute`;
   const clientEndpoint = `${input.baseUrl}/api/client/${input.client.client_id}`;
   const tasksEndpoint = `${input.baseUrl}/api/tasks?client_id=${encodeURIComponent(input.client.client_id)}`;
   const eventsEndpoint = `${input.baseUrl}/api/events?client_id=${encodeURIComponent(input.client.client_id)}`;
@@ -23,7 +23,7 @@ ROLE:
 AI_EXECUTION_LAYER
 
 SOURCE_OF_TRUTH:
-External AI_MEMORY_SYSTEM API through Brain Hub Web OS REST API.
+Supabase tables: projects, client_brains, task_queue, event_stream.
 
 CLIENT:
 client_id = ${input.client.client_id}
@@ -41,19 +41,19 @@ ${JSON.stringify(input.eventHistory, null, 2)}
 REST_API:
 READ_STATE = GET ${clientEndpoint}
 GET_TASK = GET ${tasksEndpoint}
+EXECUTE_TASK = POST ${executeEndpoint}
 WRITE_EVENT = POST ${eventsEndpoint}
 UPDATE_TASK = POST ${taskUpdateEndpoint}
 HANDOVER = POST ${handoverEndpoint}
-RUN_LOOP_STEP = POST ${runtimeEndpoint}
 
 EXECUTION_LOOP:
-READ API -> GET STATE -> GET TASK -> EXECUTE -> WRITE EVENT -> UPDATE TASK -> REPEAT
+READ -> EXECUTE -> WRITE -> UPDATE -> LOOP
 
 STRICT_RULES:
 - Do not reset state.
-- Do not create local memory, local task queues, or local state files.
+- Do not create local memory, local task queues, local JSON state, or simulated data.
 - Continue the existing client state and task queue.
-- Write every execution result back to the cloud event stream.
-- Update cloud client state after task progress.
+- Write every execution result back to Supabase event_stream.
+- Update Supabase client_brains and task_queue after task progress.
 `;
 }
