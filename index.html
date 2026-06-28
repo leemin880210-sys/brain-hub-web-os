@@ -412,7 +412,7 @@
       }
 
       function renderLoading() {
-        el("api-base").textContent = `Backend API: ${API_BASE}`;
+        el("api-base").textContent = `外脑接口地址：${API_BASE}`;
       }
 
       function selectedClient() {
@@ -427,7 +427,7 @@
         const tasks = state.taskQueue || [];
         const events = state.eventStream || [];
 
-        el("api-base").textContent = `Backend API: ${API_BASE}`;
+        el("api-base").textContent = `外脑接口地址：${API_BASE}`;
         el("project-count").textContent = String(state.projects.length);
         el("client-count").textContent = String(state.clients.length);
         el("task-count").textContent = String(tasks.length);
@@ -494,7 +494,7 @@
         const statePack = state.selectedStatePack || {};
         return `# Brain Hub 外脑接管上下文
 
-API_BASE = ${API_BASE}
+外脑接口地址 = ${API_BASE}
 
 client_id = ${getClientId(client)}
 project_id = ${client.project_id || project?.project_id || ""}
