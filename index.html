@@ -96,6 +96,25 @@
         cursor: not-allowed;
         opacity: 0.55;
       }
+      input,
+      select {
+        min-width: 0;
+        min-height: 40px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #ffffff;
+        color: var(--ink);
+        font: inherit;
+        padding: 0 12px;
+      }
+      .create-client-panel {
+        margin-bottom: 12px;
+      }
+      .create-client-form {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(180px, 0.6fr) auto;
+        gap: 10px;
+      }
       .stack {
         display: grid;
         gap: 9px;
@@ -183,7 +202,8 @@
           flex-direction: column;
         }
         .grid,
-        .bottom {
+        .bottom,
+        .create-client-form {
           grid-template-columns: 1fr;
         }
       }
@@ -207,6 +227,17 @@
       </section>
 
       <div id="notice" class="notice" hidden></div>
+
+      <section class="panel create-client-panel">
+        <div class="panel-title">
+          <h2>新建副脑</h2>
+        </div>
+        <form id="create-client-form" class="create-client-form">
+          <input id="client-name" aria-label="副脑名称" placeholder="副脑名称" autocomplete="off" required />
+          <select id="client-project" aria-label="所属项目" required></select>
+          <button id="create-client" class="primary" type="submit">新建副脑</button>
+        </form>
+      </section>
 
       <section class="grid">
         <section class="panel">
@@ -413,6 +444,7 @@
       }
 
       function renderLoading() {
+        renderProjectOptions();
         el("api-base").textContent = `外脑接口地址：${API_BASE}`;
       }
 
@@ -422,6 +454,31 @@
         return state.clients.find((client) => getClientId(client) === state.selectedClientId) || null;
       }
 
+      function renderProjectOptions() {
+        const projectSelect = el("client-project");
+        if (!projectSelect) return;
+
+        if (!state.projects.length) {
+          projectSelect.innerHTML = `<option value="">暂无项目</option>`;
+          projectSelect.disabled = true;
+          return;
+        }
+
+        const previousValue = projectSelect.value;
+        projectSelect.disabled = false;
+        projectSelect.innerHTML = state.projects
+          .map((projectItem) => {
+            const projectId = getProjectId(projectItem);
+            const label = projectItem.name || projectId || "-";
+            return `<option value="${escapeHtml(projectId)}">${escapeHtml(label)}</option>`;
+          })
+          .join("");
+
+        projectSelect.value = state.projects.some((projectItem) => getProjectId(projectItem) === previousValue)
+          ? previousValue
+          : getProjectId(state.projects[0]);
+      }
+
       function render() {
         const client = selectedClient();
         const project = state.projects.find((item) => getProjectId(item) === client?.project_id);
@@ -429,6 +486,7 @@
         const events = state.eventStream || [];
 
         el("api-base").textContent = `外脑接口地址：${API_BASE}`;
+        renderProjectOptions();
         el("project-count").textContent = String(state.projects.length);
         el("client-count").textContent = String(state.clients.length);
         el("task-count").textContent = String(tasks.length);
@@ -539,6 +597,38 @@ AI 执行规则:
         void loadDashboard();
       });
 
+      el("create-client-form").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const clientName = el("client-name").value.trim();
+        const projectId = el("client-project").value;
+
+        if (!clientName || !projectId) {
+          notice("请填写副脑名称并选择所属项目");
+          return;
+        }
+
+        state.loading = true;
+        notice("外脑连接中...");
+
+        try {
+          await api("/client/create", {
+            method: "POST",
+            body: JSON.stringify({
+              client_name: clientName,
+              project_id: projectId
+            })
+          });
+          el("client-name").value = "";
+          notice("副脑已创建");
+          await loadDashboard();
+        } catch {
+          notice("外脑连接中...");
+          render();
+        } finally {
+          state.loading = false;
+        }
+      });
+
       el("copy").addEventListener("click", async () => {
         await navigator.clipboard.writeText(el("handover").textContent);
         notice("接管上下文已复制");
@@ -587,6 +677,7 @@ AI 执行规则:
       };
 
       renderLoading = function safeRenderLoading() {
+        renderProjectOptions();
         el("api-base").textContent = `外脑接口地址：${API_BASE}`;
         if (!state.projects.length) el("projects").innerHTML = `<div class="item"><span>外脑连接中...</span></div>`;
         if (!state.clients.length) el("clients").innerHTML = `<div class="item"><span>外脑连接中...</span></div>`;
