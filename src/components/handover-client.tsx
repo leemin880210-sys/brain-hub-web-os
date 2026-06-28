@@ -41,7 +41,7 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
 
 function formatDate(value?: string) {
   if (!value) return "-";
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat("zh-CN", {
     month: "short",
     day: "2-digit",
     hour: "2-digit",
@@ -56,6 +56,26 @@ function statusClass(status: string) {
   return "status mode";
 }
 
+function displayLabel(value?: string) {
+  const labels: Record<string, string> = {
+    account_ops: "采集模式",
+    operation_ops: "执行模式",
+    evolution_ops: "优化模式",
+    pending: "待处理",
+    running: "执行中",
+    done: "已完成",
+    blocked: "已阻塞",
+    failed: "失败",
+    execution: "执行",
+    chat: "对话",
+    update: "更新",
+    task_execution: "任务执行",
+    state_update: "状态更新"
+  };
+
+  return value ? labels[value] ?? value : "-";
+}
+
 export function HandoverClient() {
   const searchParams = useSearchParams();
   const clientId = searchParams.get("client_id") ?? "";
@@ -67,7 +87,7 @@ export function HandoverClient() {
   const load = useCallback(async () => {
     if (!clientId) {
       setLoading(false);
-      setNotice("Missing client_id");
+      setNotice("缺少 client_id");
       return;
     }
 
@@ -77,7 +97,7 @@ export function HandoverClient() {
       const handover = await fetchJson<HandoverPayload>(`/api/handover?client_id=${encodeURIComponent(clientId)}`);
       setPayload(handover);
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "Handover unavailable");
+      setNotice(error instanceof Error ? error.message : "接管数据不可用");
     } finally {
       setLoading(false);
     }
@@ -109,10 +129,10 @@ export function HandoverClient() {
           auto_complete: true
         })
       });
-      setNotice(`Runtime ${result.status} at ${result.phase}`);
+      setNotice(`运行结果：${displayLabel(result.status)}，阶段：${result.phase}`);
       await load();
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "Runtime step failed");
+      setNotice(error instanceof Error ? error.message : "运行循环失败");
     } finally {
       setBusy(false);
     }
@@ -121,22 +141,22 @@ export function HandoverClient() {
   async function copyProtocol() {
     if (!payload) return;
     await navigator.clipboard.writeText(payload.handover_text);
-    setNotice("Handover protocol copied");
+    setNotice("接管协议已复制");
   }
 
   return (
     <main className="shell">
       <header className="topbar">
         <div>
-          <p className="eyebrow">Handover</p>
+          <p className="eyebrow">AI 接管</p>
           <h1>{payload?.client.name ?? clientId}</h1>
         </div>
         <div className="topbar-actions">
           <Link className="secondary-button" href="/">
             <ArrowLeft size={17} />
-            Dashboard
+            返回控制台
           </Link>
-          <button className="icon-button" type="button" onClick={load} disabled={loading || busy} aria-label="Refresh">
+          <button className="icon-button" type="button" onClick={load} disabled={loading || busy} aria-label="刷新">
             <RefreshCw size={18} />
           </button>
         </div>
@@ -148,44 +168,44 @@ export function HandoverClient() {
         <section className="panel">
           <div className="panel-title split">
             <div>
-              <p className="eyebrow">Execution Mode</p>
+              <p className="eyebrow">执行模式</p>
               <h2>{payload?.client.client_id ?? "-"}</h2>
             </div>
-            {payload ? <span className="status mode">{payload.client.status}</span> : null}
+            {payload ? <span className="status mode">{displayLabel(payload.client.status)}</span> : null}
           </div>
 
           <div className="state-grid">
             <div>
-              <span>Project</span>
+              <span>所属项目</span>
               <strong>{payload?.project.name ?? "-"}</strong>
             </div>
             <div>
-              <span>Pending</span>
+              <span>待处理</span>
               <strong>{pendingTasks.length}</strong>
             </div>
             <div>
-              <span>Running</span>
+              <span>执行中</span>
               <strong>{runningTasks.length}</strong>
             </div>
             <div>
-              <span>Current Task</span>
-              <strong>{payload?.client.current_task || "Idle"}</strong>
+              <span>当前任务</span>
+              <strong>{payload?.client.current_task || "空闲"}</strong>
             </div>
           </div>
 
           <div className="actions">
             <button className="primary-button" type="button" onClick={runCycle} disabled={!payload || busy}>
               <Play size={17} />
-              Run Cycle
+              运行循环
             </button>
             <button className="secondary-button" type="button" onClick={copyProtocol} disabled={!payload}>
               <Clipboard size={17} />
-              Copy Protocol
+              复制协议
             </button>
           </div>
 
           <div className="protocol-box">
-            <pre>{payload?.handover_text ?? "No handover payload"}</pre>
+            <pre>{payload?.handover_text ?? "暂无接管数据"}</pre>
           </div>
         </section>
 
@@ -193,7 +213,7 @@ export function HandoverClient() {
           <section className="panel">
             <div className="panel-title">
               <Database size={18} />
-              <h2>State</h2>
+              <h2>状态</h2>
             </div>
             <pre className="json-box">{JSON.stringify(payload?.current_state ?? {}, null, 2)}</pre>
           </section>
@@ -201,32 +221,32 @@ export function HandoverClient() {
           <section className="panel">
             <div className="panel-title">
               <CheckCircle2 size={18} />
-              <h2>Task Queue</h2>
+              <h2>任务队列</h2>
             </div>
             <div className="compact-list">
               {payload?.task_queue.map((task: TaskQueueItem) => (
                 <div className="compact-row" key={task.task_id}>
                   <span>{task.action}</span>
-                  <span className={statusClass(task.status)}>{task.status}</span>
+                  <span className={statusClass(task.status)}>{displayLabel(task.status)}</span>
                 </div>
               ))}
-              {!loading && payload?.task_queue.length === 0 ? <p className="empty">No tasks</p> : null}
+              {!loading && payload?.task_queue.length === 0 ? <p className="empty">暂无任务</p> : null}
             </div>
           </section>
 
           <section className="panel">
             <div className="panel-title">
               <Activity size={18} />
-              <h2>Events</h2>
+              <h2>事件</h2>
             </div>
             <div className="compact-list">
               {payload?.event_history.slice(0, 8).map((event: EventStreamItem) => (
                 <div className="compact-row" key={event.event_id}>
-                  <span>{event.type}</span>
+                  <span>{displayLabel(event.type)}</span>
                   <span>{formatDate(event.timestamp)}</span>
                 </div>
               ))}
-              {!loading && payload?.event_history.length === 0 ? <p className="empty">No events</p> : null}
+              {!loading && payload?.event_history.length === 0 ? <p className="empty">暂无事件</p> : null}
             </div>
           </section>
         </section>
