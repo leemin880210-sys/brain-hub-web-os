@@ -298,13 +298,18 @@
       }
 
       async function api(path, options = {}) {
+        const headers = {
+          Accept: "application/json",
+          ...(options.headers || {})
+        };
+
+        if (options.body && !headers["Content-Type"]) {
+          headers["Content-Type"] = "application/json";
+        }
+
         const response = await fetch(`${API_BASE}${path}`, {
           ...options,
-          headers: {
-            Accept: "application/json",
-            "Content-Type": "application/json",
-            ...(options.headers || {})
-          }
+          headers
         });
         const text = await response.text();
         const payload = text ? JSON.parse(text) : null;
