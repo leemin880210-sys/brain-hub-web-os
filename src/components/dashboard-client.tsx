@@ -34,8 +34,20 @@ type ClientStatePack = {
   events?: EventStreamItem[];
 };
 
+const API_BASE = (process.env.NEXT_PUBLIC_BRAIN_OS_API_BASE || "https://leemin880210-sys.vercel.app/api").replace(
+  /\/$/,
+  ""
+);
+
+function apiUrl(url: string) {
+  if (url.startsWith("http")) return url;
+  if (url === "/api") return API_BASE;
+  if (url.startsWith("/api/")) return `${API_BASE}${url.slice(4)}`;
+  return url;
+}
+
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(url, {
+  const response = await fetch(apiUrl(url), {
     ...init,
     headers: {
       "Content-Type": "application/json",

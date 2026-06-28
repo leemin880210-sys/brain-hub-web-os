@@ -20,18 +20,18 @@ NEXT_PUBLIC_APP_URL=https://your-api-domain
 
 ## Required API
 
-- `GET /api/projects`
-- `GET /api/clients`
-- `GET /api/client/:id`
-- `GET /api/tasks`
-- `GET /api/events`
-- `POST /api/handover`
+- `GET https://leemin880210-sys.vercel.app/api/projects`
+- `GET https://leemin880210-sys.vercel.app/api/clients`
+- `GET https://leemin880210-sys.vercel.app/api/client/:id`
+- `GET https://leemin880210-sys.vercel.app/api/tasks`
+- `GET https://leemin880210-sys.vercel.app/api/events`
+- `POST https://leemin880210-sys.vercel.app/api/handover`
 
 Client takeover in the UI calls:
 
 ```text
-GET /api/client/:id
-GET /api/tasks?client_id=:id
-GET /api/events?client_id=:id
-POST /api/handover
+GET https://leemin880210-sys.vercel.app/api/client/:id
+GET https://leemin880210-sys.vercel.app/api/tasks?client_id=:id
+GET https://leemin880210-sys.vercel.app/api/events?client_id=:id
+POST https://leemin880210-sys.vercel.app/api/handover
 ```
