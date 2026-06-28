@@ -38,13 +38,13 @@ ${JSON.stringify(input.taskQueue, null, 2)}
 最近事件:
 ${JSON.stringify(input.eventHistory, null, 2)}
 
-REST_API:
-READ_STATE = GET ${clientEndpoint}
-GET_TASK = GET ${tasksEndpoint}
-EXECUTE_TASK = POST ${executeEndpoint}
-WRITE_EVENT = POST ${eventsEndpoint}
-UPDATE_TASK = POST ${taskUpdateEndpoint}
-HANDOVER = POST ${handoverEndpoint}
+接口地址:
+读取状态 = GET ${clientEndpoint}
+获取任务 = GET ${tasksEndpoint}
+执行任务 = POST ${executeEndpoint}
+写入事件 = POST ${eventsEndpoint}
+更新任务 = POST ${taskUpdateEndpoint}
+接管 = POST ${handoverEndpoint}
 
 执行循环:
 读取状态 -> 执行任务 -> 写入事件 -> 更新任务 -> 循环
