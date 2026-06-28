@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import type { ClientBrain, EventStreamItem, OverviewPayload, Project, TaskQueueItem } from "@/lib/types";
+import type { ClientBrain, EventStreamItem, Project, TaskQueueItem } from "@/lib/types";
 
 type ApiEnvelope<T> = T & {
   success: boolean;
@@ -27,21 +27,40 @@ type ApiEnvelope<T> = T & {
   details?: unknown;
 };
 
+type SystemBrain = {
+  system_id: string;
+  name: string;
+  mode: string;
+  status: string;
+};
+
+type CountPayload = {
+  projects: number;
+  clients: number;
+  tasks: number;
+  events: number;
+};
+
+type SystemPayload = {
+  system: SystemBrain;
+  counts: CountPayload;
+};
+
 type HealthPayload = {
   api: string;
   supabase: string;
   source: string;
   data_real: boolean;
-  counts: {
-    projects: number;
-    clients: number;
-    tasks: number;
-    events: number;
-  };
+  counts: CountPayload;
 };
 
 type ExecuteResponse = {
   result: string;
+};
+
+type CreateProjectResponse = {
+  project: Project;
+  created: boolean;
 };
 
 type CreateClientResponse = {
@@ -52,11 +71,18 @@ type ClientStatePack = {
   client_state?: ClientBrain;
   client?: ClientBrain;
   state?: ClientBrain;
+  current_mode?: string;
   task_queue?: TaskQueueItem[];
   tasks?: TaskQueueItem[];
   event_stream?: EventStreamItem[];
   event_history?: EventStreamItem[];
   events?: EventStreamItem[];
+};
+
+type DashboardData = {
+  projects: Project[];
+  clients: ClientBrain[];
+  recent_events: EventStreamItem[];
 };
 
 type ApiStatus = {
@@ -66,10 +92,23 @@ type ApiStatus = {
   dataReal: boolean;
   source: string;
   error: string;
-  counts: HealthPayload["counts"];
 };
 
 const API_BASE = "https://leemin880210-sys.vercel.app/api";
+
+const emptyCounts: CountPayload = {
+  projects: 0,
+  clients: 0,
+  tasks: 0,
+  events: 0
+};
+
+const defaultSystemBrain: SystemBrain = {
+  system_id: "AI_MEMORY_SYSTEM",
+  name: "SYSTEM BRAIN",
+  mode: "cloud_brain_os",
+  status: "connecting"
+};
 
 const statusText: Record<string, string> = {
   idle: "空闲",
@@ -78,9 +117,13 @@ const statusText: Record<string, string> = {
   done: "已完成",
   blocked: "已阻塞",
   failed: "失败",
+  connected: "已连接",
+  connecting: "连接中",
   account_ops: "采集模式",
   operation_ops: "执行模式",
-  evolution_ops: "优化模式"
+  evolution_ops: "优化模式",
+  operation_system: "运营系统",
+  cloud_brain_os: "云端外脑系统"
 };
 
 function apiUrl(url: string) {
@@ -121,6 +164,14 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<ApiEnvelop
   }
 
   return payload;
+}
+
+async function tryFetchJson<T>(url: string, init?: RequestInit) {
+  try {
+    return await fetchJson<T>(url, init);
+  } catch {
+    return null;
+  }
 }
 
 function asArray<T>(payload: unknown, keys: string[]): T[] {
@@ -183,10 +234,11 @@ function StatusBadge({ label, ok, detail }: { label: string; ok: boolean; detail
 }
 
 export function DashboardClient() {
-  const [data, setData] = useState<OverviewPayload>({
+  const [systemBrain, setSystemBrain] = useState<SystemBrain>(defaultSystemBrain);
+  const [systemCounts, setSystemCounts] = useState<CountPayload>(emptyCounts);
+  const [data, setData] = useState<DashboardData>({
     projects: [],
     clients: [],
-    tasks: [],
     recent_events: []
   });
   const [apiStatus, setApiStatus] = useState<ApiStatus>({
@@ -195,49 +247,18 @@ export function DashboardClient() {
     supabaseConnected: false,
     dataReal: false,
     source: "-",
-    error: "",
-    counts: {
-      projects: 0,
-      clients: 0,
-      tasks: 0,
-      events: 0
-    }
+    error: ""
   });
   const [statePack, setStatePack] = useState<ClientStatePack | null>(null);
+  const [selectedProjectId, setSelectedProjectId] = useState("");
   const [selectedClientId, setSelectedClientId] = useState("");
+  const [projectName, setProjectName] = useState("");
   const [clientName, setClientName] = useState("");
-  const [clientProjectId, setClientProjectId] = useState("");
   const [taskAction, setTaskAction] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [origin, setOrigin] = useState("");
-
-  const refreshHealth = useCallback(async () => {
-    setApiStatus((current) => ({ ...current, loading: true }));
-    try {
-      const health = await fetchJson<HealthPayload>("/api/health");
-      setApiStatus({
-        loading: false,
-        apiConnected: health.api === "connected",
-        supabaseConnected: health.supabase === "connected",
-        dataReal: health.data_real === true,
-        source: health.source,
-        error: "",
-        counts: health.counts
-      });
-    } catch (error) {
-      setApiStatus((current) => ({
-        ...current,
-        loading: false,
-        apiConnected: false,
-        supabaseConnected: false,
-        dataReal: false,
-        error: error instanceof Error ? error.message : "外脑连接中..."
-      }));
-      throw error;
-    }
-  }, []);
 
   const loadClientContext = useCallback(async (clientId: string) => {
     const [clientPayload, tasksPayload, eventsPayload] = await Promise.all([
@@ -259,64 +280,97 @@ export function DashboardClient() {
     });
   }, []);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setNotice("");
-    try {
-      await refreshHealth();
-      const [projectsPayload, clientsPayload, tasksPayload, eventsPayload] = await Promise.all([
-        fetchJson<unknown>("/api/projects"),
-        fetchJson<unknown>("/api/clients"),
-        fetchJson<unknown>("/api/tasks"),
-        fetchJson<unknown>("/api/events")
-      ]);
-      const overview: OverviewPayload = {
-        projects: asArray<Project>(projectsPayload, ["projects"]),
-        clients: asArray<ClientBrain>(clientsPayload, ["clients"]),
-        tasks: asArray<TaskQueueItem>(tasksPayload, ["tasks", "task_queue"]),
-        recent_events: asArray<EventStreamItem>(eventsPayload, ["events", "event_stream", "event_history"])
-      };
-      setData(overview);
-      setClientProjectId((current) => current || overview.projects[0]?.project_id || "");
+  const load = useCallback(
+    async (projectOverride?: string, clientOverride?: string) => {
+      setLoading(true);
+      setNotice("");
 
-      const nextClientId = selectedClientId || overview.clients[0]?.client_id || "";
+      const [systemPayload, healthPayload, projectsPayload, eventsPayload] = await Promise.all([
+        tryFetchJson<SystemPayload>("/api/system"),
+        tryFetchJson<HealthPayload>("/api/health"),
+        tryFetchJson<unknown>("/api/projects"),
+        tryFetchJson<unknown>("/api/events")
+      ]);
+
+      setApiStatus({
+        loading: false,
+        apiConnected: healthPayload?.api === "connected" || Boolean(systemPayload?.system),
+        supabaseConnected: healthPayload?.supabase === "connected" || Boolean(systemPayload?.system),
+        dataReal: healthPayload?.data_real === true || Boolean(systemPayload?.system),
+        source: healthPayload?.source ?? "api",
+        error: systemPayload || projectsPayload ? "" : "外脑连接中..."
+      });
+
+      setSystemBrain(systemPayload?.system ?? defaultSystemBrain);
+      setSystemCounts(systemPayload?.counts ?? healthPayload?.counts ?? emptyCounts);
+
+      const projects = asArray<Project>(projectsPayload, ["projects"]);
+      const nextProjectId =
+        projectOverride && projects.some((project) => project.project_id === projectOverride)
+          ? projectOverride
+          : selectedProjectId && projects.some((project) => project.project_id === selectedProjectId)
+            ? selectedProjectId
+            : projects[0]?.project_id ?? "";
+
+      const clientsPayload = nextProjectId
+        ? await tryFetchJson<unknown>(`/api/clients?project_id=${encodeURIComponent(nextProjectId)}`)
+        : null;
+      const clients = asArray<ClientBrain>(clientsPayload, ["clients"]);
+      const nextClientId =
+        clientOverride && clients.some((client) => client.client_id === clientOverride)
+          ? clientOverride
+          : selectedClientId && clients.some((client) => client.client_id === selectedClientId)
+            ? selectedClientId
+            : clients[0]?.client_id ?? "";
+
+      setData({
+        projects,
+        clients,
+        recent_events: asArray<EventStreamItem>(eventsPayload, ["events", "event_stream", "event_history"])
+      });
+      setSelectedProjectId(nextProjectId);
       setSelectedClientId(nextClientId);
+
       if (nextClientId) {
-        await loadClientContext(nextClientId);
+        try {
+          await loadClientContext(nextClientId);
+        } catch {
+          setStatePack(null);
+        }
       } else {
         setStatePack(null);
       }
-    } catch {
-      setNotice("外脑连接中...");
-    } finally {
+
+      if (!systemPayload && !projectsPayload) {
+        setNotice("外脑连接中...");
+      }
+
       setLoading(false);
-    }
-  }, [loadClientContext, refreshHealth, selectedClientId]);
+    },
+    [loadClientContext, selectedClientId, selectedProjectId]
+  );
 
   useEffect(() => {
     setOrigin(window.location.origin);
     void load();
   }, [load]);
 
+  const selectedProject = useMemo(
+    () => data.projects.find((project) => project.project_id === selectedProjectId),
+    [data.projects, selectedProjectId]
+  );
   const selectedClient = useMemo(
     () =>
       statePack?.client_state ??
       statePack?.client ??
       statePack?.state ??
       data.clients.find((client) => client.client_id === selectedClientId) ??
-      data.clients[0],
+      null,
     [data.clients, selectedClientId, statePack]
   );
-  const selectedProject = useMemo(
-    () => data.projects.find((project) => project.project_id === selectedClient?.project_id),
-    [data.projects, selectedClient?.project_id]
-  );
   const clientTasks = useMemo(
-    () =>
-      statePack?.task_queue ??
-      statePack?.tasks ??
-      data.tasks.filter((task) => task.client_id === selectedClient?.client_id),
-    [data.tasks, selectedClient?.client_id, statePack]
+    () => statePack?.task_queue ?? statePack?.tasks ?? [],
+    [statePack]
   );
   const clientEvents = useMemo(
     () =>
@@ -327,37 +381,93 @@ export function DashboardClient() {
     [data.recent_events, selectedClient?.client_id, statePack]
   );
 
-  const pendingCount = data.tasks.filter((task) => task.status === "pending").length;
-  const runningCount = data.tasks.filter((task) => task.status === "running").length;
+  const pendingCount = clientTasks.filter((task) => task.status === "pending").length;
+  const runningCount = clientTasks.filter((task) => task.status === "running").length;
   const handoverLink = selectedClient
     ? `${origin}/handover?client_id=${encodeURIComponent(selectedClient.client_id)}`
     : "";
-  const createProjectId = clientProjectId || data.projects[0]?.project_id || "";
 
-  async function createClient(event: FormEvent<HTMLFormElement>) {
+  async function createProject(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const nextClientName = clientName.trim();
+    const nextProjectName = projectName.trim();
 
-    if (!nextClientName || !createProjectId) {
-      setNotice("请填写副脑名称并选择所属项目");
+    if (!nextProjectName) {
+      setNotice("请先填写项目名称");
       return;
     }
 
     setBusy(true);
     setNotice("外脑连接中...");
     try {
-      await fetchJson<CreateClientResponse>("/api/client/create", {
+      const result = await fetchJson<CreateProjectResponse>("/api/project/create", {
+        method: "POST",
+        body: JSON.stringify({
+          project_name: nextProjectName
+        })
+      });
+      setProjectName("");
+      setSelectedProjectId(result.project.project_id);
+      setSelectedClientId("");
+      setNotice(result.created ? "项目已创建" : "项目已存在，已切换到该项目");
+      await load(result.project.project_id, "");
+    } catch {
+      setNotice("外脑连接中...");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function createClient(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const nextClientName = clientName.trim();
+
+    if (!selectedProjectId) {
+      setNotice("请先选择或创建项目");
+      return;
+    }
+
+    if (!nextClientName) {
+      setNotice("请填写副脑名称");
+      return;
+    }
+
+    setBusy(true);
+    setNotice("外脑连接中...");
+    try {
+      const result = await fetchJson<CreateClientResponse>("/api/client/create", {
         method: "POST",
         body: JSON.stringify({
           client_name: nextClientName,
-          project_id: createProjectId
+          project_id: selectedProjectId
         })
       });
       setClientName("");
       setNotice("副脑已创建");
-      await load();
+      await load(selectedProjectId, result.client.client_id);
     } catch {
       setNotice("外脑连接中...");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function selectProject(projectId: string) {
+    setSelectedProjectId(projectId);
+    setSelectedClientId("");
+    setStatePack(null);
+    setNotice("外脑连接中...");
+    await load(projectId, "");
+  }
+
+  async function selectClient(clientId: string) {
+    setSelectedClientId(clientId);
+    setBusy(true);
+    setNotice("");
+    try {
+      await loadClientContext(clientId);
+      setNotice(`已加载子脑：${clientId}`);
+    } catch {
+      setNotice("子脑加载失败");
     } finally {
       setBusy(false);
     }
@@ -379,9 +489,9 @@ export function DashboardClient() {
       });
       setTaskAction("");
       setNotice("任务已写入云端");
-      await load();
-    } catch (error) {
-      setNotice(error instanceof Error ? error.message : "任务创建失败");
+      await load(selectedProjectId, selectedClient.client_id);
+    } catch {
+      setNotice("任务创建失败");
     } finally {
       setBusy(false);
     }
@@ -404,9 +514,9 @@ export function DashboardClient() {
         })
       });
       setNotice(`执行结果：${result.result}`);
-      await load();
-    } catch (error) {
-      setNotice(error instanceof Error ? error.message : "执行失败");
+      await load(selectedProjectId, selectedClient.client_id);
+    } catch {
+      setNotice("执行失败");
     } finally {
       setBusy(false);
     }
@@ -427,22 +537,8 @@ export function DashboardClient() {
 
       await navigator.clipboard.writeText(handoverText);
       setNotice("接管上下文已复制");
-    } catch (error) {
-      setNotice(error instanceof Error ? error.message : "接管失败");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function selectClient(clientId: string) {
-    setSelectedClientId(clientId);
-    setBusy(true);
-    setNotice("");
-    try {
-      await loadClientContext(clientId);
-      setNotice(`已加载子脑：${clientId}`);
-    } catch (error) {
-      setNotice(error instanceof Error ? error.message : "子脑加载失败");
+    } catch {
+      setNotice("接管失败");
     } finally {
       setBusy(false);
     }
@@ -452,10 +548,16 @@ export function DashboardClient() {
     <main className="shell">
       <header className="topbar">
         <div>
-          <p className="eyebrow">外脑 API 实时校验</p>
+          <p className="eyebrow">外脑 API 可视化控制台</p>
           <h1>Brain Hub 外脑控制台</h1>
         </div>
-        <button className="icon-button" type="button" onClick={load} disabled={loading || busy} aria-label="刷新">
+        <button
+          className="icon-button"
+          type="button"
+          onClick={() => void load()}
+          disabled={loading || busy}
+          aria-label="刷新"
+        >
           <RefreshCw size={18} />
         </button>
       </header>
@@ -466,12 +568,12 @@ export function DashboardClient() {
         <StatusBadge
           label="后端 API"
           ok={apiStatus.apiConnected}
-          detail={apiStatus.loading ? "连接中..." : apiStatus.error || "健康检查通过"}
+          detail={apiStatus.loading ? "连接中..." : apiStatus.error || "系统接口已响应"}
         />
         <StatusBadge
           label="Supabase"
           ok={apiStatus.supabaseConnected}
-          detail={apiStatus.loading ? "连接中..." : apiStatus.error || "云数据库查询成功"}
+          detail={apiStatus.loading ? "连接中..." : apiStatus.error || "云数据库已连接"}
         />
         <StatusBadge
           label="真实数据"
@@ -479,75 +581,115 @@ export function DashboardClient() {
           detail={
             apiStatus.loading
               ? "连接中..."
-              : `来源=${apiStatus.source}；项目=${apiStatus.counts.projects}；子脑=${apiStatus.counts.clients}；任务=${apiStatus.counts.tasks}`
+              : `来源=${apiStatus.source}；项目=${systemCounts.projects}；子脑=${systemCounts.clients}`
           }
         />
-        <Metric icon={<Server size={20} />} label="事件数" value={apiStatus.counts.events} />
+        <Metric icon={<Server size={20} />} label="事件数" value={systemCounts.events} />
       </section>
 
-      <section className="metric-grid" aria-label="总览">
-        <Metric icon={<Layers3 size={20} />} label="项目" value={data.projects.length} />
-        <Metric icon={<Users2 size={20} />} label="子脑" value={data.clients.length} />
-        <Metric icon={<Clock3 size={20} />} label="待处理" value={pendingCount} />
-        <Metric icon={<Activity size={20} />} label="执行中" value={runningCount} />
-      </section>
-
-      <section className="panel create-client-panel">
-        <div className="panel-title">
-          <Users2 size={18} />
-          <h2>新建副脑</h2>
+      <section className="system-panel panel">
+        <div className="panel-title split">
+          <div>
+            <p className="eyebrow">SYSTEM</p>
+            <h2>🧠 SYSTEM BRAIN</h2>
+          </div>
+          <span className="status mode">{displayStatus(systemBrain.status)}</span>
         </div>
-        <form className="create-client-form" onSubmit={createClient}>
-          <input
-            aria-label="副脑名称"
-            value={clientName}
-            onChange={(event) => setClientName(event.target.value)}
-            placeholder="副脑名称"
-          />
-          <select
-            aria-label="所属项目"
-            value={createProjectId}
-            onChange={(event) => setClientProjectId(event.target.value)}
-            disabled={!data.projects.length}
-          >
-            {data.projects.map((project) => (
-              <option key={project.project_id} value={project.project_id}>
-                {project.name || project.project_id}
-              </option>
-            ))}
-          </select>
-          <button type="submit" className="primary-button" disabled={busy || !clientName.trim() || !createProjectId}>
-            <Plus size={18} />
-            新建副脑
-          </button>
-        </form>
+        <div className="state-grid system-state-grid">
+          <div>
+            <span>系统 ID</span>
+            <strong>{systemBrain.system_id}</strong>
+          </div>
+          <div>
+            <span>系统模式</span>
+            <strong>{displayStatus(systemBrain.mode)}</strong>
+          </div>
+          <div>
+            <span>PROJECT 总数</span>
+            <strong>{systemCounts.projects}</strong>
+          </div>
+          <div>
+            <span>CLIENT 总数</span>
+            <strong>{systemCounts.clients}</strong>
+          </div>
+        </div>
       </section>
 
-      <section className="workspace">
+      <div className="hierarchy-arrow">↓</div>
+
+      <section className="metric-grid" aria-label="当前层级数据">
+        <Metric icon={<Layers3 size={20} />} label="当前项目数" value={data.projects.length} />
+        <Metric icon={<Users2 size={20} />} label="当前项目子脑" value={data.clients.length} />
+        <Metric icon={<Clock3 size={20} />} label="当前待处理" value={pendingCount} />
+        <Metric icon={<Activity size={20} />} label="当前执行中" value={runningCount} />
+      </section>
+
+      <section className="workspace hierarchy-workspace">
         <section className="panel">
           <div className="panel-title">
             <Database size={18} />
-            <h2>项目列表</h2>
+            <h2>📦 PROJECT LIST</h2>
           </div>
+
+          <form className="create-project-form" onSubmit={createProject}>
+            <input
+              aria-label="项目名称"
+              value={projectName}
+              onChange={(event) => setProjectName(event.target.value)}
+              placeholder="项目名称"
+            />
+            <button type="submit" className="primary-button" disabled={busy || !projectName.trim()}>
+              <Plus size={18} />
+              新建项目
+            </button>
+          </form>
+
           <div className="list">
             {data.projects.map((project: Project) => (
-              <div className="project-row" key={project.project_id}>
+              <button
+                className={project.project_id === selectedProjectId ? "project-row project-button active" : "project-row project-button"}
+                key={project.project_id}
+                type="button"
+                onClick={() => void selectProject(project.project_id)}
+              >
                 <div>
                   <strong>{project.name}</strong>
                   <span>{project.project_id}</span>
                 </div>
-                <span className="status mode">{project.mode}</span>
-              </div>
+                <span className="status mode">{displayStatus(project.mode)}</span>
+              </button>
             ))}
-            {!loading && data.projects.length === 0 ? <p className="empty">暂无项目</p> : null}
+            {!loading && data.projects.length === 0 ? <p className="empty">暂无项目，请先新建项目</p> : null}
           </div>
         </section>
 
         <section className="panel clients-panel">
-          <div className="panel-title">
-            <Users2 size={18} />
-            <h2>子脑列表</h2>
+          <div className="panel-title split">
+            <div>
+              <p className="eyebrow">归属于 PROJECT</p>
+              <h2>👤 CLIENT LIST</h2>
+            </div>
+            <span className="status mode">{selectedProject?.project_id ?? "未选择项目"}</span>
           </div>
+
+          <form className="create-client-form compact-create-form" onSubmit={createClient}>
+            <input
+              aria-label="副脑名称"
+              value={clientName}
+              onChange={(event) => setClientName(event.target.value)}
+              placeholder="副脑名称"
+              disabled={!selectedProjectId}
+            />
+            <button
+              type="submit"
+              className="primary-button"
+              disabled={busy || !selectedProjectId || !clientName.trim()}
+            >
+              <Plus size={18} />
+              新建副脑
+            </button>
+          </form>
+
           <div className="client-list">
             {data.clients.map((client: ClientBrain) => (
               <button
@@ -566,14 +708,15 @@ export function DashboardClient() {
                 </div>
               </button>
             ))}
-            {!loading && data.clients.length === 0 ? <p className="empty">暂无子脑</p> : null}
+            {!loading && selectedProjectId && data.clients.length === 0 ? <p className="empty">当前项目暂无子脑</p> : null}
+            {!loading && !selectedProjectId ? <p className="empty">请先选择或创建项目</p> : null}
           </div>
         </section>
 
         <section className="panel detail-panel">
           <div className="panel-title split">
             <div>
-              <p className="eyebrow">当前子脑</p>
+              <p className="eyebrow">当前 CLIENT</p>
               <h2>{selectedClient?.name ?? "未选择子脑"}</h2>
             </div>
             {selectedClient ? <span className="status mode">{displayStatus(selectedClient.status)}</span> : null}
@@ -581,12 +724,20 @@ export function DashboardClient() {
 
           <div className="state-grid">
             <div>
-              <span>子脑 ID</span>
+              <span>所属 SYSTEM</span>
+              <strong>{systemBrain.system_id}</strong>
+            </div>
+            <div>
+              <span>所属 PROJECT</span>
+              <strong>{(selectedProject?.name ?? selectedProjectId) || "-"}</strong>
+            </div>
+            <div>
+              <span>CLIENT ID</span>
               <strong>{selectedClient?.client_id ?? "-"}</strong>
             </div>
             <div>
-              <span>所属项目</span>
-              <strong>{selectedProject?.name ?? selectedClient?.project_id ?? "-"}</strong>
+              <span>当前模式</span>
+              <strong>{displayStatus(statePack?.current_mode || selectedClient?.status)}</strong>
             </div>
             <div className="wide">
               <span>当前任务</span>
@@ -628,6 +779,8 @@ export function DashboardClient() {
         </section>
       </section>
 
+      <div className="hierarchy-arrow">↓</div>
+
       <section className="bottom-grid">
         <section className="panel">
           <div className="panel-title">
@@ -655,7 +808,7 @@ export function DashboardClient() {
                 ))}
               </tbody>
             </table>
-            {!loading && clientTasks.length === 0 ? <p className="empty">暂无任务</p> : null}
+            {!loading && clientTasks.length === 0 ? <p className="empty">当前子脑暂无任务</p> : null}
           </div>
         </section>
 
@@ -674,7 +827,7 @@ export function DashboardClient() {
                 <code>{JSON.stringify(event.output)}</code>
               </div>
             ))}
-            {!loading && clientEvents.length === 0 ? <p className="empty">暂无事件</p> : null}
+            {!loading && clientEvents.length === 0 ? <p className="empty">当前子脑暂无事件</p> : null}
           </div>
         </section>
       </section>
