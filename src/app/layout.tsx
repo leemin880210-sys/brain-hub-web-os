@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Brain Hub 外脑控制台",
+  title: "外脑控制台",
   description: "云端多智能体外脑操作系统"
 };
 
