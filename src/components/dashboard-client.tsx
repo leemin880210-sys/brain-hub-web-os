@@ -88,6 +88,24 @@ type ContextPackResponse = {
   context_pack: ContextPackItem;
 };
 
+type HandoffPayload = {
+  version: "handoff.v1";
+  generated_at: string;
+  client_id: string;
+  project_id: string;
+  chat_log: unknown[];
+  summary: string;
+  state: Record<string, unknown>;
+  next_step: string;
+  context_pack_id?: string;
+};
+
+type HandoffResponse = {
+  received: boolean;
+  handoff: HandoffPayload;
+  event: EventStreamItem;
+};
+
 type DashboardData = {
   projects: Project[];
   clients: ClientBrain[];
@@ -274,6 +292,8 @@ export function DashboardClient() {
   });
   const [statePack, setStatePack] = useState<ClientStatePack | null>(null);
   const [contextPack, setContextPack] = useState<ContextPackItem | null>(null);
+  const [handoffJson, setHandoffJson] = useState<HandoffPayload | null>(null);
+  const [handoffSentAt, setHandoffSentAt] = useState("");
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [selectedClientId, setSelectedClientId] = useState("");
   const [projectName, setProjectName] = useState("");
@@ -371,6 +391,8 @@ export function DashboardClient() {
       }
 
       setContextPack(null);
+      setHandoffJson(null);
+      setHandoffSentAt("");
 
       if (!systemPayload && !projectsPayload) {
         setNotice("外脑连接中");
@@ -468,6 +490,8 @@ export function DashboardClient() {
       setSelectedProjectId(result.project.project_id);
       setSelectedClientId("");
       setContextPack(null);
+      setHandoffJson(null);
+      setHandoffSentAt("");
       await load(result.project.project_id, "");
       setNoticeTone("success");
       setNotice(result.created ? "项目已创建" : "项目已存在，已切换到该项目");
@@ -505,6 +529,8 @@ export function DashboardClient() {
       setSelectedClientId("");
       setStatePack(null);
       setContextPack(null);
+      setHandoffJson(null);
+      setHandoffSentAt("");
       await load("", "");
       setNoticeTone("success");
       setNotice("项目已删除，列表已刷新");
@@ -544,6 +570,8 @@ export function DashboardClient() {
       });
       setClientName("");
       setContextPack(null);
+      setHandoffJson(null);
+      setHandoffSentAt("");
       await load(selectedProjectId, result.client.client_id);
       setNoticeTone("success");
       setNotice("子项目已创建");
@@ -581,6 +609,8 @@ export function DashboardClient() {
       setSelectedClientId("");
       setStatePack(null);
       setContextPack(null);
+      setHandoffJson(null);
+      setHandoffSentAt("");
       await load(nextProjectId, "");
       setNoticeTone("success");
       setNotice("子项目已删除，列表已刷新");
@@ -597,6 +627,8 @@ export function DashboardClient() {
     setSelectedClientId("");
     setStatePack(null);
     setContextPack(null);
+    setHandoffJson(null);
+    setHandoffSentAt("");
     setNoticeTone("info");
     setNotice("正在加载子项目...");
     await load(projectId, "");
@@ -605,6 +637,8 @@ export function DashboardClient() {
   async function selectClient(clientId: string) {
     setSelectedClientId(clientId);
     setContextPack(null);
+    setHandoffJson(null);
+    setHandoffSentAt("");
     setBusy(true);
     setNoticeTone("info");
     setNotice("正在加载工作状态...");
@@ -617,6 +651,140 @@ export function DashboardClient() {
     } finally {
       setBusy(false);
     }
+  }
+
+  async function fetchSelectedContextPack() {
+    if (!selectedClient) {
+      throw new Error("请选择子项目");
+    }
+
+    const result = await fetchJson<ContextPackResponse>(
+      `/api/client/${encodeURIComponent(selectedClient.client_id)}/context_pack`
+    );
+
+    return result.context_pack;
+  }
+
+  function createHandoffPayload(sourceContextPack: ContextPackItem): HandoffPayload {
+    const sourcePack = asRecord(sourceContextPack.pack);
+    const sourceMemory = asRecord(sourcePack.memory);
+    const sourceRuntime = asRecord(sourcePack.runtime_instruction);
+    const sourceInstruction = asRecord(sourcePack.EXECUTION_INSTRUCTION);
+    const sourceState = asRecord(sourcePack.state ?? sourcePack.current_state ?? sourcePack.client_state);
+    const sourceTasks = asArray<TaskQueueItem>(sourcePack.task_queue, []);
+    const sourceEvents = asArray<EventStreamItem>(sourcePack.event_stream, []);
+    const chatLog = asArray<unknown>(sourceMemory.chat_log, []);
+    const clientId = selectedClient?.client_id ?? textValue(sourceState.client_id, selectedClientId);
+    const projectId = selectedProject?.project_id ?? textValue(sourceState.project_id, selectedProjectId);
+    const nextAction =
+      textValue(sourceRuntime.next_action, "") ||
+      textValue(sourceInstruction.command, "") ||
+      textValue(sourcePack.current_task, "") ||
+      selectedClient?.current_task ||
+      "等待任务";
+    const handoffState: Record<string, unknown> = {
+      ...(selectedClient ? asRecord(selectedClient) : {}),
+      ...sourceState,
+      client_id: clientId,
+      project_id: projectId
+    };
+    const summaryBase =
+      textValue(sourceContextPack.summary, "") ||
+      textValue(sourceMemory.latest_context_pack_summary, "") ||
+      `子项目 ${selectedClient?.name ?? clientId} 已生成接管包。`;
+    const summary = [
+      summaryBase,
+      `当前状态：${displayStatus(textValue(handoffState.status, selectedClient?.status ?? "-"))}。`,
+      `任务队列：${sourceTasks.length || clientTasks.length} 个任务；事件流：${sourceEvents.length || clientEvents.length} 条事件；当前对话：${chatLog.length} 条。`,
+      `下一步：${nextAction}。`
+    ].join("\n");
+
+    return {
+      version: "handoff.v1",
+      generated_at: new Date().toISOString(),
+      client_id: clientId,
+      project_id: projectId,
+      chat_log: chatLog,
+      summary,
+      state: handoffState,
+      next_step: nextAction,
+      context_pack_id: sourceContextPack.pack_id
+    };
+  }
+
+  async function ensureHandoffPayload() {
+    const sourceContextPack = contextPack ?? (await fetchSelectedContextPack());
+
+    if (!contextPack) {
+      setContextPack(sourceContextPack);
+    }
+
+    const payload = createHandoffPayload(sourceContextPack);
+    setHandoffJson(payload);
+    setHandoffSentAt("");
+    return payload;
+  }
+
+  async function generateHandoffJson() {
+    setContextLoading(true);
+    setNoticeTone("info");
+    setNotice("正在生成 handoff.json...");
+    try {
+      await ensureHandoffPayload();
+      setNoticeTone("success");
+      setNotice("handoff.json 已生成");
+    } catch (error) {
+      setNoticeTone("error");
+      setNotice(error instanceof Error ? error.message : "handoff.json 生成失败");
+    } finally {
+      setContextLoading(false);
+    }
+  }
+
+  async function sendHandoffJson() {
+    if (!selectedClient) {
+      setNoticeTone("error");
+      setNotice("请选择子项目");
+      return;
+    }
+
+    setBusy(true);
+    setNoticeTone("info");
+    setNotice("正在发送给外脑...");
+    try {
+      const payload = handoffJson ?? (await ensureHandoffPayload());
+      const result = await fetchJson<HandoffResponse>("/api/handoff", {
+        method: "POST",
+        body: JSON.stringify(payload)
+      });
+
+      if (!result.received) {
+        throw new Error("外脑未确认接收 handoff.json");
+      }
+
+      setHandoffJson(result.handoff ?? payload);
+      setHandoffSentAt(new Date().toISOString());
+      setNoticeTone("success");
+      setNotice("handoff.json 已发送给外脑");
+    } catch (error) {
+      setNoticeTone("error");
+      setNotice(error instanceof Error ? error.message : "handoff.json 发送失败");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function copyHandoffJson() {
+    if (!handoffJson) {
+      setNoticeTone("info");
+      setNotice("请先生成 handoff.json");
+      return;
+    }
+
+    await navigator.clipboard.writeText(JSON.stringify(handoffJson, null, 2));
+    document.getElementById("handoff-json-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    setNoticeTone("success");
+    setNotice("当前 handoff.json 已显示并复制");
   }
 
   async function loadContextPack() {
@@ -858,15 +1026,24 @@ export function DashboardClient() {
             <button
               type="button"
               className="primary-button"
-              onClick={() => void loadContextPack()}
+              onClick={() => void generateHandoffJson()}
               disabled={!selectedClient || busy || contextLoading}
             >
               <Activity size={17} />
-              {contextLoading ? "加载中" : "接管"}
+              {contextLoading ? "生成中" : "生成接管包"}
             </button>
-            <button type="button" className="secondary-button" onClick={() => void copyContextPack()} disabled={!contextPack}>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => void sendHandoffJson()}
+              disabled={!selectedClient || busy || contextLoading}
+            >
+              <Database size={17} />
+              发送给外脑
+            </button>
+            <button type="button" className="secondary-button" onClick={() => void copyHandoffJson()} disabled={!handoffJson}>
               <Copy size={17} />
-              复制接管包
+              查看当前 handoff.json
             </button>
           </div>
         </section>
@@ -932,6 +1109,19 @@ export function DashboardClient() {
           </div>
           <div className="next-step-box">{nextStep}</div>
         </section>
+      </section>
+
+      <section id="handoff-json-panel" className="panel handoff-json-panel" aria-label="当前 handoff.json">
+        <div className="panel-title split">
+          <div>
+            <p className="eyebrow">接管传递</p>
+            <h2>当前 handoff.json</h2>
+          </div>
+          <span className="status mode">{handoffSentAt ? `已发送 ${formatDate(handoffSentAt)}` : "未发送"}</span>
+        </div>
+        <pre className="json-box">
+          {handoffJson ? JSON.stringify(handoffJson, null, 2) : "尚未生成 handoff.json"}
+        </pre>
       </section>
     </main>
   );
