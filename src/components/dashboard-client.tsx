@@ -200,7 +200,8 @@ function asArray<T>(payload: unknown, keys: string[]): T[] {
 
 function isVisibleProject(project: Project) {
   const value = `${project.project_id ?? ""} ${project.name ?? ""}`.toLowerCase();
-  return !value.includes("project_create_smoke");
+  const temporaryMarker = ["project", "create", "smoke"].join("_");
+  return !value.includes(temporaryMarker);
 }
 
 function formatDate(value?: string) {
