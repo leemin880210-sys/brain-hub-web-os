@@ -15,6 +15,7 @@ import {
   Plus,
   RefreshCw,
   Server,
+  Trash2,
   Users2
 } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
@@ -67,6 +68,17 @@ type CreateClientResponse = {
   client: ClientBrain;
 };
 
+type DeleteProjectResponse = {
+  deleted: boolean;
+  project_id: string;
+};
+
+type DeleteClientResponse = {
+  deleted: boolean;
+  client_id: string;
+  project_id: string;
+};
+
 type ClientStatePack = {
   client_state?: ClientBrain;
   client?: ClientBrain;
@@ -104,7 +116,7 @@ const emptyCounts: CountPayload = {
 };
 
 const defaultSystemBrain: SystemBrain = {
-  system_id: "AI_MEMORY_SYSTEM",
+  system_id: "brain_os",
   name: "系统",
   mode: "cloud_brain_os",
   status: "connecting"
@@ -410,8 +422,33 @@ export function DashboardClient() {
       setSelectedClientId("");
       setNotice(result.created ? "项目已创建" : "项目已存在，已切换到该项目");
       await load(result.project.project_id, "");
-    } catch {
-      setNotice("外脑连接中...");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "项目创建失败");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deleteProject(projectId: string) {
+    if (!projectId) return;
+
+    setBusy(true);
+    setNotice("正在删除项目...");
+    try {
+      await fetchJson<DeleteProjectResponse>("/api/project/delete", {
+        method: "POST",
+        body: JSON.stringify({
+          project_id: projectId
+        })
+      });
+
+      setSelectedProjectId("");
+      setSelectedClientId("");
+      setStatePack(null);
+      setNotice("项目已删除");
+      await load("", "");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "项目删除失败");
     } finally {
       setBusy(false);
     }
@@ -443,8 +480,33 @@ export function DashboardClient() {
       setClientName("");
       setNotice("子项目已创建");
       await load(selectedProjectId, result.client.client_id);
-    } catch {
-      setNotice("外脑连接中...");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "子项目创建失败");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deleteClient(clientId: string) {
+    if (!clientId) return;
+
+    setBusy(true);
+    setNotice("正在删除子项目...");
+    try {
+      const result = await fetchJson<DeleteClientResponse>("/api/client/delete", {
+        method: "POST",
+        body: JSON.stringify({
+          client_id: clientId
+        })
+      });
+
+      const nextProjectId = result.project_id || selectedProjectId;
+      setSelectedClientId("");
+      setStatePack(null);
+      setNotice("子项目已删除");
+      await load(nextProjectId, "");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "子项目删除失败");
     } finally {
       setBusy(false);
     }
@@ -651,18 +713,29 @@ export function DashboardClient() {
 
           <div className="list">
             {data.projects.map((project: Project) => (
-              <button
+              <div
                 className={project.project_id === selectedProjectId ? "project-row project-button active" : "project-row project-button"}
                 key={project.project_id}
-                type="button"
                 onClick={() => void selectProject(project.project_id)}
               >
-                <div>
+                <div className="row-content">
                   <strong>{project.name}</strong>
                   <span>{project.project_id}</span>
                 </div>
                 <span className="status mode">{displayStatus(project.mode)}</span>
-              </button>
+                <button
+                  type="button"
+                  className="row-delete-button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    void deleteProject(project.project_id);
+                  }}
+                  disabled={busy}
+                  aria-label="删除项目"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
             ))}
             {!loading && data.projects.length === 0 ? <p className="empty">暂无项目，请先新建项目</p> : null}
           </div>
@@ -704,13 +777,12 @@ export function DashboardClient() {
 
           <div className="client-list">
             {data.clients.map((client: ClientBrain) => (
-              <button
+              <div
                 className={client.client_id === selectedClient?.client_id ? "client-row active" : "client-row"}
                 key={client.client_id}
-                type="button"
                 onClick={() => void selectClient(client.client_id)}
               >
-                <div>
+                <div className="row-content">
                   <strong>{client.name}</strong>
                   <span>{client.client_id}</span>
                 </div>
@@ -718,7 +790,19 @@ export function DashboardClient() {
                   <span className="status mode">{displayStatus(client.status)}</span>
                   <ArrowRight size={16} />
                 </div>
-              </button>
+                <button
+                  type="button"
+                  className="row-delete-button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    void deleteClient(client.client_id);
+                  }}
+                  disabled={busy}
+                  aria-label="删除子项目"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
             ))}
             {!loading && selectedProjectId && data.clients.length === 0 ? <p className="empty">当前项目暂无子项目</p> : null}
             {!loading && !selectedProjectId ? <p className="empty">请先选择或创建项目</p> : null}
