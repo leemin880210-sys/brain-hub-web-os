@@ -387,8 +387,7 @@ export function DashboardClient() {
     ? `${origin}/handover?client_id=${encodeURIComponent(selectedClient.client_id)}`
     : "";
 
-  async function createProject(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function createProject() {
     const nextProjectName = projectName.trim();
 
     if (!nextProjectName) {
@@ -417,8 +416,7 @@ export function DashboardClient() {
     }
   }
 
-  async function createClient(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function createClient() {
     const nextClientName = clientName.trim();
 
     if (!selectedProjectId) {
@@ -427,7 +425,7 @@ export function DashboardClient() {
     }
 
     if (!nextClientName) {
-      setNotice("请填写副脑名称");
+      setNotice("请填写子项目名称（副脑）");
       return;
     }
 
@@ -442,7 +440,7 @@ export function DashboardClient() {
         })
       });
       setClientName("");
-      setNotice("副脑已创建");
+      setNotice("子项目已创建");
       await load(selectedProjectId, result.client.client_id);
     } catch {
       setNotice("外脑连接中...");
@@ -631,14 +629,20 @@ export function DashboardClient() {
             <h2>📦 PROJECT LIST</h2>
           </div>
 
-          <form className="create-project-form" onSubmit={createProject}>
+          <form
+            className="create-project-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void createProject();
+            }}
+          >
             <input
               aria-label="项目名称"
               value={projectName}
               onChange={(event) => setProjectName(event.target.value)}
               placeholder="项目名称"
             />
-            <button type="submit" className="primary-button" disabled={busy || !projectName.trim()}>
+            <button type="button" className="primary-button" onClick={() => void createProject()} disabled={busy}>
               <Plus size={18} />
               新建项目
             </button>
@@ -672,21 +676,28 @@ export function DashboardClient() {
             <span className="status mode">{selectedProject?.project_id ?? "未选择项目"}</span>
           </div>
 
-          <form className="create-client-form compact-create-form" onSubmit={createClient}>
+          <form
+            className="create-client-form compact-create-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void createClient();
+            }}
+          >
             <input
-              aria-label="副脑名称"
+              aria-label="子项目名称"
               value={clientName}
               onChange={(event) => setClientName(event.target.value)}
-              placeholder="副脑名称"
+              placeholder="子项目名称（副脑）"
               disabled={!selectedProjectId}
             />
             <button
-              type="submit"
+              type="button"
               className="primary-button"
-              disabled={busy || !selectedProjectId || !clientName.trim()}
+              onClick={() => void createClient()}
+              disabled={busy}
             >
               <Plus size={18} />
-              新建副脑
+              新建子项目
             </button>
           </form>
 
