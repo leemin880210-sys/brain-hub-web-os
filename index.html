@@ -178,6 +178,21 @@
         border-color: var(--green);
         background: #edf7f0;
       }
+      .row-content {
+        min-width: 0;
+        flex: 1;
+      }
+      .row-delete-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 36px;
+        min-height: 36px;
+        border-color: #e2aaa4;
+        background: #fff7f6;
+        color: var(--red);
+        flex: 0 0 auto;
+      }
       .item strong,
       .item span {
         display: block;
@@ -286,7 +301,7 @@
         <div class="state-grid">
           <div>
             <span>系统 ID</span>
-            <strong id="system-id">AI_MEMORY_SYSTEM</strong>
+            <strong id="system-id">brain_os</strong>
           </div>
           <div>
             <span>系统模式</span>
@@ -347,7 +362,7 @@
           <div class="stack">
             <div class="item">
               <span>所属 SYSTEM</span>
-              <strong id="current-system">AI_MEMORY_SYSTEM</strong>
+              <strong id="current-system">brain_os</strong>
             </div>
             <div class="item">
               <span>所属项目</span>
@@ -391,7 +406,7 @@
       const API_RETRY_ATTEMPTS = 2;
 
       const defaultSystem = {
-        system_id: "AI_MEMORY_SYSTEM",
+        system_id: "brain_os",
         name: "系统",
         mode: "cloud_brain_os",
         status: "connecting"
@@ -407,7 +422,8 @@
         selectedProjectId: new URLSearchParams(location.search).get("project_id") || "",
         selectedClientId: new URLSearchParams(location.search).get("client_id") || "",
         selectedStatePack: null,
-        loading: false
+        loading: false,
+        busy: false
       };
 
       const el = (id) => document.getElementById(id);
@@ -555,8 +571,9 @@
           render();
         }
 
-        notice(systemPayload || projectsPayload ? "外脑 API 已同步" : "外脑连接中...");
         state.loading = false;
+        notice(systemPayload || projectsPayload ? "外脑 API 已同步" : "外脑连接中...");
+        render();
       }
 
       async function selectProject(projectId) {
@@ -601,11 +618,14 @@
           render();
         } finally {
           state.loading = false;
+          render();
         }
       }
 
       async function createProject(event) {
         event?.preventDefault?.();
+        if (state.busy) return;
+
         const projectName = el("project-name").value.trim();
 
         if (!projectName) {
@@ -613,22 +633,30 @@
           return;
         }
 
+        state.busy = true;
         notice("外脑连接中...");
+        render();
         try {
           const result = await api("/project/create", {
             method: "POST",
-            body: JSON.stringify({ project_name: projectName })
+            body: JSON.stringify({ project_name: projectName, system_id: "brain_os" })
           });
           el("project-name").value = "";
           await loadDashboard(result.project?.project_id || "", "");
           notice(result.created ? "项目已创建" : "项目已存在，已切换到该项目");
-        } catch {
-          notice("外脑连接中...");
+        } catch (error) {
+          notice(error instanceof Error ? error.message : "项目创建失败", true);
+          render();
+        } finally {
+          state.busy = false;
+          render();
         }
       }
 
       async function createClient(event) {
         event?.preventDefault?.();
+        if (state.busy) return;
+
         const clientName = el("client-name").value.trim();
 
         if (!state.selectedProjectId) {
@@ -641,7 +669,9 @@
           return;
         }
 
+        state.busy = true;
         notice("外脑连接中...");
+        render();
         try {
           const result = await api("/client/create", {
             method: "POST",
@@ -653,8 +683,64 @@
           el("client-name").value = "";
           await loadDashboard(state.selectedProjectId, result.client?.client_id || "");
           notice("子项目已创建");
-        } catch {
-          notice("外脑连接中...");
+        } catch (error) {
+          notice(error instanceof Error ? error.message : "子项目创建失败", true);
+          render();
+        } finally {
+          state.busy = false;
+          render();
+        }
+      }
+
+      async function deleteProject(projectId) {
+        if (!projectId || state.busy) return;
+
+        state.busy = true;
+        notice("正在删除项目...");
+        render();
+        try {
+          await api("/project/delete", {
+            method: "POST",
+            body: JSON.stringify({ project_id: projectId })
+          });
+          state.selectedProjectId = "";
+          state.selectedClientId = "";
+          state.selectedStatePack = null;
+          state.taskQueue = [];
+          await loadDashboard("", "");
+          notice("项目已删除");
+        } catch (error) {
+          notice(error instanceof Error ? error.message : "项目删除失败", true);
+          render();
+        } finally {
+          state.busy = false;
+          render();
+        }
+      }
+
+      async function deleteClient(clientId) {
+        if (!clientId || state.busy) return;
+
+        state.busy = true;
+        notice("正在删除子项目...");
+        render();
+        try {
+          const result = await api("/client/delete", {
+            method: "POST",
+            body: JSON.stringify({ client_id: clientId })
+          });
+          const nextProjectId = result.project_id || state.selectedProjectId;
+          state.selectedClientId = "";
+          state.selectedStatePack = null;
+          state.taskQueue = [];
+          await loadDashboard(nextProjectId, "");
+          notice("子项目已删除");
+        } catch (error) {
+          notice(error instanceof Error ? error.message : "子项目删除失败", true);
+          render();
+        } finally {
+          state.busy = false;
+          render();
         }
       }
 
@@ -666,7 +752,7 @@
 
         el("api-base").textContent = `外脑接口地址：${API_BASE}`;
         el("system-status").textContent = statusText[state.system.status] || state.system.status || "连接中";
-        el("system-id").textContent = state.system.system_id || "AI_MEMORY_SYSTEM";
+        el("system-id").textContent = state.system.system_id || "brain_os";
         el("system-mode").textContent = statusText[state.system.mode] || state.system.mode || "云端外脑系统";
         el("system-project-count").textContent = String(state.counts.projects || state.projects.length);
         el("system-client-count").textContent = String(state.counts.clients || 0);
@@ -676,46 +762,75 @@
         el("event-count").textContent = String(events.length);
         el("selected-project-badge").textContent = project ? getProjectId(project) : "未选择项目";
 
+        el("project-name").disabled = state.busy;
+        el("create-project").disabled = state.busy;
+
         el("projects").innerHTML =
           state.projects
             .map((projectItem) => {
               const projectId = getProjectId(projectItem);
-              return `<button class="item ${projectId === state.selectedProjectId ? "active" : ""}" data-project="${escapeHtml(
+              return `<div class="item ${projectId === state.selectedProjectId ? "active" : ""}" data-project="${escapeHtml(
                 projectId
-              )}" type="button"><strong>${escapeHtml(projectItem.name || projectId || "-")}</strong><span>${escapeHtml(
+              )}" role="button" tabindex="0"><div class="row-content"><strong>${escapeHtml(
+                projectItem.name || projectId || "-"
+              )}</strong><span>${escapeHtml(
                 projectId || "-"
-              )}</span></button>`;
+              )}</span></div><button class="row-delete-button" data-delete-project="${escapeHtml(
+                projectId
+              )}" type="button" ${state.busy ? "disabled" : ""}>删除</button></div>`;
             })
             .join("") || `<div class="item"><span>暂无项目，请先新建项目</span></div>`;
 
-        document.querySelectorAll("[data-project]").forEach((button) => {
-          button.addEventListener("click", () => {
-            void selectProject(button.dataset.project);
+        document.querySelectorAll("[data-project]").forEach((row) => {
+          row.addEventListener("click", () => {
+            if (state.busy) return;
+            void selectProject(row.dataset.project);
           });
         });
 
-        el("client-name").disabled = !state.selectedProjectId;
-        el("create-client").disabled = false;
+        document.querySelectorAll("[data-delete-project]").forEach((button) => {
+          button.addEventListener("click", (event) => {
+            event.stopPropagation();
+            void deleteProject(button.dataset.deleteProject);
+          });
+        });
+
+        el("client-name").disabled = state.busy || !state.selectedProjectId;
+        el("create-client").disabled = state.busy;
         el("clients").innerHTML =
           state.clients
             .map((clientItem) => {
               const clientId = getClientId(clientItem);
-              return `<button class="item ${clientId === state.selectedClientId ? "active" : ""}" data-client="${escapeHtml(
+              return `<div class="item ${clientId === state.selectedClientId ? "active" : ""}" data-client="${escapeHtml(
                 clientId
-              )}" type="button"><strong>${escapeHtml(clientItem.name || clientId || "-")}</strong><span>${escapeHtml(
+              )}" role="button" tabindex="0"><div class="row-content"><strong>${escapeHtml(
+                clientItem.name || clientId || "-"
+              )}</strong><span>${escapeHtml(
                 clientId || "-"
-              )}</span></button>`;
+              )}</span></div><button class="row-delete-button" data-delete-client="${escapeHtml(
+                clientId
+              )}" type="button" ${state.busy ? "disabled" : ""}>删除</button></div>`;
             })
             .join("") ||
           `<div class="item"><span>${state.selectedProjectId ? "当前项目暂无子项目" : "请先选择或创建项目"}</span></div>`;
 
-        document.querySelectorAll("[data-client]").forEach((button) => {
-          button.addEventListener("click", () => {
-            void selectClient(button.dataset.client);
+        document.querySelectorAll("[data-client]").forEach((row) => {
+          row.addEventListener("click", () => {
+            if (state.busy) return;
+            void selectClient(row.dataset.client);
           });
         });
 
-        el("current-system").textContent = state.system.system_id || "AI_MEMORY_SYSTEM";
+        document.querySelectorAll("[data-delete-client]").forEach((button) => {
+          button.addEventListener("click", (event) => {
+            event.stopPropagation();
+            void deleteClient(button.dataset.deleteClient);
+          });
+        });
+
+        el("refresh").disabled = state.busy || state.loading;
+        el("copy").disabled = state.busy || !client;
+        el("current-system").textContent = state.system.system_id || "brain_os";
         el("current-project").textContent = project ? `${project.name || getProjectId(project)} / ${getProjectId(project)}` : "-";
         el("current-client").textContent = client ? `${client.name || getClientId(client)} / ${getClientId(client)}` : "-";
         el("current-task").textContent = client?.current_task || state.selectedStatePack?.current_task || "空闲";
@@ -751,7 +866,7 @@
         const statePack = state.selectedStatePack || {};
         return `# 外脑接管上下文
 
-system_id = ${state.system.system_id || "AI_MEMORY_SYSTEM"}
+system_id = ${state.system.system_id || "brain_os"}
 project_id = ${client.project_id || project?.project_id || ""}
 client_id = ${getClientId(client)}
 current_mode = ${statePack.current_mode || client.status || ""}
