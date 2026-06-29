@@ -462,11 +462,6 @@ export function DashboardClient() {
         throw new Error("项目删除失败：接口未确认删除");
       }
 
-      setData((current) => ({
-        ...current,
-        projects: current.projects.filter((project) => project.project_id !== projectId),
-        clients: []
-      }));
       setSelectedProjectId("");
       setSelectedClientId("");
       setStatePack(null);
@@ -537,10 +532,6 @@ export function DashboardClient() {
       }
 
       const nextProjectId = result.project_id || selectedProjectId;
-      setData((current) => ({
-        ...current,
-        clients: current.clients.filter((client) => client.client_id !== clientId)
-      }));
       setSelectedClientId("");
       setStatePack(null);
       await load(nextProjectId, "");
