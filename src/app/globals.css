@@ -582,6 +582,10 @@ td:first-child {
   font-weight: 700;
 }
 
+.handoff-json-panel {
+  margin-top: 12px;
+}
+
 .protocol-box,
 .json-box {
   border: 1px solid var(--line);
