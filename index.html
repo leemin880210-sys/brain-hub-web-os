@@ -512,6 +512,11 @@
         return project?.project_id || project?.id || "";
       }
 
+      function isVisibleProject(project) {
+        const value = `${getProjectId(project)} ${project?.name || ""}`.toLowerCase();
+        return !value.includes("project_create_smoke");
+      }
+
       function selectedProject() {
         return state.projects.find((project) => getProjectId(project) === state.selectedProjectId) || null;
       }
@@ -534,8 +539,11 @@
         ]);
 
         state.system = systemPayload?.system || defaultSystem;
-        state.counts = systemPayload?.counts || state.counts;
-        state.projects = asArray(projectsPayload, ["projects", "project_brains"]);
+        state.projects = asArray(projectsPayload, ["projects", "project_brains"]).filter(isVisibleProject);
+        state.counts = {
+          ...(systemPayload?.counts || state.counts),
+          projects: state.projects.length
+        };
         state.eventStream = asArray(eventsPayload, ["events", "event_stream", "event_history"]);
 
         const nextProjectId =
@@ -754,7 +762,7 @@
         el("system-status").textContent = statusText[state.system.status] || state.system.status || "连接中";
         el("system-id").textContent = state.system.system_id || "brain_os";
         el("system-mode").textContent = statusText[state.system.mode] || state.system.mode || "云端外脑系统";
-        el("system-project-count").textContent = String(state.counts.projects || state.projects.length);
+        el("system-project-count").textContent = String(state.projects.length);
         el("system-client-count").textContent = String(state.counts.clients || 0);
         el("project-count").textContent = String(state.projects.length);
         el("client-count").textContent = String(state.clients.length);
