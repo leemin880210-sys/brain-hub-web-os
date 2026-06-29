@@ -198,6 +198,11 @@ function asArray<T>(payload: unknown, keys: string[]): T[] {
   return [];
 }
 
+function isVisibleProject(project: Project) {
+  const value = `${project.project_id ?? ""} ${project.name ?? ""}`.toLowerCase();
+  return !value.includes("project_create_smoke");
+}
+
 function formatDate(value?: string) {
   if (!value) return "-";
   return new Intl.DateTimeFormat("zh-CN", {
@@ -314,9 +319,12 @@ export function DashboardClient() {
       });
 
       setSystemBrain(systemPayload?.system ?? defaultSystemBrain);
-      setSystemCounts(systemPayload?.counts ?? healthPayload?.counts ?? emptyCounts);
 
-      const projects = asArray<Project>(projectsPayload, ["projects"]);
+      const projects = asArray<Project>(projectsPayload, ["projects"]).filter(isVisibleProject);
+      setSystemCounts({
+        ...(systemPayload?.counts ?? healthPayload?.counts ?? emptyCounts),
+        projects: projects.length
+      });
       const nextProjectId =
         projectOverride && projects.some((project) => project.project_id === projectOverride)
           ? projectOverride
