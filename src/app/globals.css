@@ -171,6 +171,59 @@ h2 {
   margin-top: 12px;
 }
 
+.handover-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.context-card {
+  min-height: 210px;
+}
+
+.compact-state-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.context-list {
+  display: grid;
+  gap: 8px;
+}
+
+.context-summary,
+.next-step-box {
+  min-height: 116px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcf8;
+  padding: 12px;
+}
+
+.context-summary p {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--ink);
+  font-weight: 700;
+  line-height: 1.55;
+}
+
+.context-summary span {
+  display: block;
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.next-step-box {
+  display: flex;
+  align-items: center;
+  color: var(--green);
+  font-size: 20px;
+  font-weight: 900;
+  overflow-wrap: anywhere;
+}
+
 .side-stack {
   display: grid;
   gap: 12px;
@@ -570,12 +623,14 @@ td:first-child {
   .metric-grid,
   .workspace,
   .bottom-grid,
+  .handover-grid,
   .handover-layout {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .detail-panel,
   .bottom-grid > .panel:first-child,
+  .handover-grid > .panel:first-child,
   .handover-layout > .panel:first-child {
     grid-column: 1 / -1;
   }
@@ -599,6 +654,7 @@ td:first-child {
   .metric-grid,
   .workspace,
   .bottom-grid,
+  .handover-grid,
   .handover-layout,
   .create-project-form,
   .create-client-form,
@@ -608,6 +664,7 @@ td:first-child {
 
   .detail-panel,
   .bottom-grid > .panel:first-child,
+  .handover-grid > .panel:first-child,
   .handover-layout > .panel:first-child,
   .state-grid .wide {
     grid-column: auto;
