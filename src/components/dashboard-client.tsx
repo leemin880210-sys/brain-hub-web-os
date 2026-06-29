@@ -3,24 +3,19 @@
 import {
   Activity,
   AlertCircle,
-  ArrowRight,
   CheckCircle2,
-  Clock3,
   Copy,
   Database,
-  ExternalLink,
   Layers3,
-  Link2,
-  Play,
   Plus,
   RefreshCw,
-  Server,
   Trash2,
   Users2
 } from "lucide-react";
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import type { ClientBrain, EventStreamItem, Project, TaskQueueItem } from "@/lib/types";
+import { isBusinessProject } from "@/lib/project-classification";
+import type { ClientBrain, ContextPackItem, EventStreamItem, Project, TaskQueueItem } from "@/lib/types";
 
 type ApiEnvelope<T> = T & {
   success: boolean;
@@ -55,10 +50,6 @@ type HealthPayload = {
   counts: CountPayload;
 };
 
-type ExecuteResponse = {
-  result: string;
-};
-
 type CreateProjectResponse = {
   project: Project;
   created: boolean;
@@ -70,11 +61,13 @@ type CreateClientResponse = {
 
 type DeleteProjectResponse = {
   deleted: boolean;
+  deleted_id: string;
   project_id: string;
 };
 
 type DeleteClientResponse = {
   deleted: boolean;
+  deleted_id: string;
   client_id: string;
   project_id: string;
 };
@@ -89,6 +82,10 @@ type ClientStatePack = {
   event_stream?: EventStreamItem[];
   event_history?: EventStreamItem[];
   events?: EventStreamItem[];
+};
+
+type ContextPackResponse = {
+  context_pack: ContextPackItem;
 };
 
 type DashboardData = {
@@ -125,17 +122,17 @@ const defaultSystemBrain: SystemBrain = {
 const statusText: Record<string, string> = {
   idle: "空闲",
   pending: "待处理",
-  running: "执行中",
+  running: "进行中",
   done: "已完成",
   blocked: "已阻塞",
   failed: "失败",
   connected: "已连接",
   connecting: "连接中",
-  account_ops: "采集模式",
-  operation_ops: "执行模式",
-  evolution_ops: "优化模式",
-  operation_system: "运营系统",
-  cloud_brain_os: "云端外脑系统"
+  account_ops: "采集",
+  operation_ops: "执行",
+  evolution_ops: "优化",
+  operation_system: "运营项目",
+  cloud_brain_os: "云端外脑"
 };
 
 function apiUrl(url: string) {
@@ -198,10 +195,14 @@ function asArray<T>(payload: unknown, keys: string[]): T[] {
   return [];
 }
 
-function isVisibleProject(project: Project) {
-  const value = `${project.project_id ?? ""} ${project.name ?? ""}`.toLowerCase();
-  const temporaryMarker = ["project", "create", "smoke"].join("_");
-  return !value.includes(temporaryMarker);
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+}
+
+function textValue(value: unknown, fallback = "-") {
+  if (typeof value === "string" && value.trim()) return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  return fallback;
 }
 
 function formatDate(value?: string) {
@@ -226,6 +227,10 @@ function statusClass(status: string) {
   return "status mode";
 }
 
+function isVisibleProject(project: Project) {
+  return isBusinessProject(project);
+}
+
 function Metric({ icon, label, value }: { icon: ReactNode; label: string; value: number }) {
   return (
     <article className="metric">
@@ -244,7 +249,7 @@ function StatusBadge({ label, ok, detail }: { label: string; ok: boolean; detail
       <div className="metric-icon">{ok ? <CheckCircle2 size={20} /> : <AlertCircle size={20} />}</div>
       <div>
         <span>{label}</span>
-        <strong>{ok ? "正常" : "异常"}</strong>
+        <strong>{ok ? "正常" : "等待"}</strong>
         <small>{detail}</small>
       </div>
     </article>
@@ -268,16 +273,16 @@ export function DashboardClient() {
     error: ""
   });
   const [statePack, setStatePack] = useState<ClientStatePack | null>(null);
+  const [contextPack, setContextPack] = useState<ContextPackItem | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [selectedClientId, setSelectedClientId] = useState("");
   const [projectName, setProjectName] = useState("");
   const [clientName, setClientName] = useState("");
-  const [taskAction, setTaskAction] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [contextLoading, setContextLoading] = useState(false);
   const [notice, setNotice] = useState("");
   const [noticeTone, setNoticeTone] = useState<"info" | "success" | "error">("info");
-  const [origin, setOrigin] = useState("");
 
   const loadClientContext = useCallback(async (clientId: string) => {
     const [clientPayload, tasksPayload, eventsPayload] = await Promise.all([
@@ -318,7 +323,7 @@ export function DashboardClient() {
         supabaseConnected: healthPayload?.supabase === "connected" || Boolean(systemPayload?.system),
         dataReal: healthPayload?.data_real === true || Boolean(systemPayload?.system),
         source: healthPayload?.source ?? "api",
-        error: systemPayload || projectsPayload ? "" : "外脑连接中..."
+        error: systemPayload || projectsPayload ? "" : "外脑连接中"
       });
 
       setSystemBrain(systemPayload?.system ?? defaultSystemBrain);
@@ -328,6 +333,7 @@ export function DashboardClient() {
         ...(systemPayload?.counts ?? healthPayload?.counts ?? emptyCounts),
         projects: projects.length
       });
+
       const nextProjectId =
         projectOverride && projects.some((project) => project.project_id === projectOverride)
           ? projectOverride
@@ -364,8 +370,10 @@ export function DashboardClient() {
         setStatePack(null);
       }
 
+      setContextPack(null);
+
       if (!systemPayload && !projectsPayload) {
-        setNotice("外脑连接中...");
+        setNotice("外脑连接中");
       }
 
       setLoading(false);
@@ -374,7 +382,6 @@ export function DashboardClient() {
   );
 
   useEffect(() => {
-    setOrigin(window.location.origin);
     void load();
   }, [load]);
 
@@ -404,22 +411,51 @@ export function DashboardClient() {
     [data.recent_events, selectedClient?.client_id, statePack]
   );
 
+  const pack = useMemo(() => asRecord(contextPack?.pack), [contextPack]);
+  const packState = useMemo(() => {
+    const fromPack = asRecord(pack.state ?? pack.current_state ?? pack.client_state);
+    if (Object.keys(fromPack).length > 0) return fromPack;
+    return selectedClient ? asRecord(selectedClient) : {};
+  }, [pack, selectedClient]);
+  const packTasks = useMemo(() => {
+    const tasks = asArray<TaskQueueItem>(pack.task_queue, []);
+    return tasks.length ? tasks : clientTasks;
+  }, [clientTasks, pack.task_queue]);
+  const memorySummary = useMemo(() => {
+    const memory = asRecord(pack.memory);
+    return (
+      textValue(memory.latest_context_pack_summary, "") ||
+      textValue(contextPack?.summary, "") ||
+      "暂无记忆摘要"
+    );
+  }, [contextPack?.summary, pack.memory]);
+  const nextStep = useMemo(() => {
+    const runtime = asRecord(pack.runtime_instruction);
+    const instruction = asRecord(pack.EXECUTION_INSTRUCTION);
+    return (
+      textValue(runtime.next_action, "") ||
+      textValue(instruction.command, "") ||
+      textValue(pack.current_task, "") ||
+      selectedClient?.current_task ||
+      "等待任务"
+    );
+  }, [pack, selectedClient?.current_task]);
+
   const pendingCount = clientTasks.filter((task) => task.status === "pending").length;
   const runningCount = clientTasks.filter((task) => task.status === "running").length;
-  const handoverLink = selectedClient
-    ? `${origin}/handover?client_id=${encodeURIComponent(selectedClient.client_id)}`
-    : "";
 
   async function createProject() {
     const nextProjectName = projectName.trim();
 
     if (!nextProjectName) {
+      setNoticeTone("error");
       setNotice("请先填写项目名称");
       return;
     }
 
     setBusy(true);
-    setNotice("外脑连接中...");
+    setNoticeTone("info");
+    setNotice("正在创建项目...");
     try {
       const result = await fetchJson<CreateProjectResponse>("/api/project/create", {
         method: "POST",
@@ -431,9 +467,12 @@ export function DashboardClient() {
       setProjectName("");
       setSelectedProjectId(result.project.project_id);
       setSelectedClientId("");
-      setNotice(result.created ? "项目已创建" : "项目已存在，已切换到该项目");
+      setContextPack(null);
       await load(result.project.project_id, "");
+      setNoticeTone("success");
+      setNotice(result.created ? "项目已创建" : "项目已存在，已切换到该项目");
     } catch (error) {
+      setNoticeTone("error");
       setNotice(error instanceof Error ? error.message : "项目创建失败");
     } finally {
       setBusy(false);
@@ -452,19 +491,20 @@ export function DashboardClient() {
     setNotice("正在删除项目...");
     try {
       const result = await fetchJson<DeleteProjectResponse>("/api/project/delete", {
-        method: "POST",
+        method: "DELETE",
         body: JSON.stringify({
           project_id: projectId
         })
       });
 
-      if (!result.deleted) {
+      if (!result.deleted || result.deleted_id !== projectId) {
         throw new Error("项目删除失败：接口未确认删除");
       }
 
       setSelectedProjectId("");
       setSelectedClientId("");
       setStatePack(null);
+      setContextPack(null);
       await load("", "");
       setNoticeTone("success");
       setNotice("项目已删除，列表已刷新");
@@ -480,17 +520,20 @@ export function DashboardClient() {
     const nextClientName = clientName.trim();
 
     if (!selectedProjectId) {
+      setNoticeTone("error");
       setNotice("请先选择或创建项目");
       return;
     }
 
     if (!nextClientName) {
+      setNoticeTone("error");
       setNotice("请填写子项目名称");
       return;
     }
 
     setBusy(true);
-    setNotice("外脑连接中...");
+    setNoticeTone("info");
+    setNotice("正在创建子项目...");
     try {
       const result = await fetchJson<CreateClientResponse>("/api/client/create", {
         method: "POST",
@@ -500,9 +543,12 @@ export function DashboardClient() {
         })
       });
       setClientName("");
-      setNotice("子项目已创建");
+      setContextPack(null);
       await load(selectedProjectId, result.client.client_id);
+      setNoticeTone("success");
+      setNotice("子项目已创建");
     } catch (error) {
+      setNoticeTone("error");
       setNotice(error instanceof Error ? error.message : "子项目创建失败");
     } finally {
       setBusy(false);
@@ -521,19 +567,20 @@ export function DashboardClient() {
     setNotice("正在删除子项目...");
     try {
       const result = await fetchJson<DeleteClientResponse>("/api/client/delete", {
-        method: "POST",
+        method: "DELETE",
         body: JSON.stringify({
           client_id: clientId
         })
       });
 
-      if (!result.deleted) {
+      if (!result.deleted || result.deleted_id !== clientId) {
         throw new Error("子项目删除失败：接口未确认删除");
       }
 
       const nextProjectId = result.project_id || selectedProjectId;
       setSelectedClientId("");
       setStatePack(null);
+      setContextPack(null);
       await load(nextProjectId, "");
       setNoticeTone("success");
       setNotice("子项目已删除，列表已刷新");
@@ -549,173 +596,99 @@ export function DashboardClient() {
     setSelectedProjectId(projectId);
     setSelectedClientId("");
     setStatePack(null);
-    setNotice("外脑连接中...");
+    setContextPack(null);
+    setNoticeTone("info");
+    setNotice("正在加载子项目...");
     await load(projectId, "");
   }
 
   async function selectClient(clientId: string) {
     setSelectedClientId(clientId);
+    setContextPack(null);
     setBusy(true);
-    setNotice("");
+    setNoticeTone("info");
+    setNotice("正在加载工作状态...");
     try {
       await loadClientContext(clientId);
-      setNotice(`已加载子项目：${clientId}`);
+      setNotice("");
     } catch {
-      setNotice("子项目加载失败");
+      setNoticeTone("error");
+      setNotice("工作状态加载失败");
     } finally {
       setBusy(false);
     }
   }
 
-  async function createTask(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!selectedClient || taskAction.trim().length === 0) return;
+  async function loadContextPack() {
+    if (!selectedClient) {
+      setNoticeTone("error");
+      setNotice("请先选择子项目");
+      return;
+    }
 
-    setBusy(true);
-    setNotice("");
+    setContextLoading(true);
+    setNoticeTone("info");
+    setNotice("正在获取接管包...");
     try {
-      await fetchJson("/api/tasks", {
-        method: "POST",
-        body: JSON.stringify({
-          client_id: selectedClient.client_id,
-          action: taskAction.trim()
-        })
-      });
-      setTaskAction("");
-      setNotice("任务已写入云端");
-      await load(selectedProjectId, selectedClient.client_id);
-    } catch {
-      setNotice("任务创建失败");
+      const result = await fetchJson<ContextPackResponse>(
+        `/api/client/${encodeURIComponent(selectedClient.client_id)}/context_pack`
+      );
+      setContextPack(result.context_pack);
+      setNoticeTone("success");
+      setNotice("接管包已加载");
+    } catch (error) {
+      setNoticeTone("error");
+      setNotice(error instanceof Error ? error.message : "接管包加载失败");
     } finally {
-      setBusy(false);
+      setContextLoading(false);
     }
   }
 
-  async function executeTask() {
-    if (!selectedClient) return;
+  async function copyContextPack() {
+    if (!contextPack) return;
 
-    setBusy(true);
-    setNotice("");
-    try {
-      const action = selectedClient.current_task || clientTasks.find((task) => task.status === "pending")?.action;
-      const result = await fetchJson<ExecuteResponse>("/api/execute", {
-        method: "POST",
-        body: JSON.stringify({
-          client_id: selectedClient.client_id,
-          task: {
-            action: action || "collect_client_info"
-          }
-        })
-      });
-      setNotice(`执行结果：${result.result}`);
-      await load(selectedProjectId, selectedClient.client_id);
-    } catch {
-      setNotice("执行失败");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function copyHandoverContext() {
-    if (!selectedClient) return;
-
-    setBusy(true);
-    setNotice("");
-    try {
-      const handover = await fetchJson<Record<string, unknown>>("/api/handover", {
-        method: "POST",
-        body: JSON.stringify({ client_id: selectedClient.client_id })
-      });
-      const handoverText =
-        typeof handover.handover_text === "string" ? handover.handover_text : JSON.stringify(handover, null, 2);
-
-      await navigator.clipboard.writeText(handoverText);
-      setNotice("接管上下文已复制");
-    } catch {
-      setNotice("接管失败");
-    } finally {
-      setBusy(false);
-    }
+    await navigator.clipboard.writeText(JSON.stringify(contextPack, null, 2));
+    setNoticeTone("success");
+    setNotice("接管包已复制");
   }
 
   return (
     <main className="shell">
       <header className="topbar">
         <div>
-          <p className="eyebrow">外脑 API 可视化控制台</p>
-          <h1>外脑控制台</h1>
+          <p className="eyebrow">外脑状态</p>
+          <h1>接管控制台</h1>
         </div>
         <button
           className="icon-button"
           type="button"
           onClick={() => void load()}
-          disabled={loading || busy}
+          disabled={loading || busy || contextLoading}
           aria-label="刷新"
         >
           <RefreshCw size={18} />
         </button>
       </header>
 
-      {notice ? <div className={noticeTone === "error" ? "notice error" : noticeTone === "success" ? "notice success" : "notice"}>{notice}</div> : null}
+      {notice ? (
+        <div className={noticeTone === "error" ? "notice error" : noticeTone === "success" ? "notice success" : "notice"}>
+          {notice}
+        </div>
+      ) : null}
 
-      <section className="metric-grid" aria-label="API 状态">
+      <section className="metric-grid" aria-label="接口状态">
         <StatusBadge
-          label="后端 API"
+          label="接口"
           ok={apiStatus.apiConnected}
-          detail={apiStatus.loading ? "连接中..." : apiStatus.error || "系统接口已响应"}
+          detail={apiStatus.loading ? "连接中" : apiStatus.error || "已响应"}
         />
         <StatusBadge
-          label="Supabase"
+          label="云数据库"
           ok={apiStatus.supabaseConnected}
-          detail={apiStatus.loading ? "连接中..." : apiStatus.error || "云数据库已连接"}
+          detail={apiStatus.loading ? "连接中" : apiStatus.error || "已连接"}
         />
-        <StatusBadge
-          label="真实数据"
-          ok={apiStatus.dataReal}
-          detail={
-            apiStatus.loading
-              ? "连接中..."
-              : `来源=${apiStatus.source}；项目=${systemCounts.projects}；子项目=${systemCounts.clients}`
-          }
-        />
-        <Metric icon={<Server size={20} />} label="事件数" value={systemCounts.events} />
-      </section>
-
-      <section className="system-panel panel">
-        <div className="panel-title split">
-          <div>
-            <p className="eyebrow">SYSTEM</p>
-            <h2>系统</h2>
-          </div>
-          <span className="status mode">{displayStatus(systemBrain.status)}</span>
-        </div>
-        <div className="state-grid system-state-grid">
-          <div>
-            <span>系统 ID</span>
-            <strong>{systemBrain.system_id}</strong>
-          </div>
-          <div>
-            <span>系统模式</span>
-            <strong>{displayStatus(systemBrain.mode)}</strong>
-          </div>
-          <div>
-            <span>项目总数</span>
-            <strong>{systemCounts.projects}</strong>
-          </div>
-          <div>
-            <span>子项目总数</span>
-            <strong>{systemCounts.clients}</strong>
-          </div>
-        </div>
-      </section>
-
-      <div className="hierarchy-arrow">↓</div>
-
-      <section className="metric-grid" aria-label="当前层级数据">
-        <Metric icon={<Layers3 size={20} />} label="当前项目数" value={data.projects.length} />
-        <Metric icon={<Users2 size={20} />} label="当前项目子项目" value={data.clients.length} />
-        <Metric icon={<Clock3 size={20} />} label="当前待处理" value={pendingCount} />
-        <Metric icon={<Activity size={20} />} label="当前执行中" value={runningCount} />
+        <Metric icon={<Layers3 size={20} />} label="项目" value={data.projects.length} />
+        <Metric icon={<Users2 size={20} />} label="子项目" value={systemCounts.clients} />
       </section>
 
       <section className="workspace hierarchy-workspace">
@@ -755,7 +728,6 @@ export function DashboardClient() {
                   <strong>{project.name}</strong>
                   <span>{project.project_id}</span>
                 </div>
-                <span className="status mode">{displayStatus(project.mode)}</span>
                 <button
                   type="button"
                   className="row-delete-button"
@@ -777,17 +749,17 @@ export function DashboardClient() {
                 </button>
               </div>
             ))}
-            {!loading && data.projects.length === 0 ? <p className="empty">暂无项目，请先新建项目</p> : null}
+            {!loading && data.projects.length === 0 ? <p className="empty">暂无项目</p> : null}
           </div>
         </section>
 
         <section className="panel clients-panel">
           <div className="panel-title split">
             <div>
-              <p className="eyebrow">归属于项目</p>
+              <p className="eyebrow">{selectedProject?.name ?? "未选择项目"}</p>
               <h2>子项目列表</h2>
             </div>
-            <span className="status mode">{selectedProject?.project_id ?? "未选择项目"}</span>
+            <span className="status mode">{data.clients.length}</span>
           </div>
 
           <form
@@ -804,12 +776,7 @@ export function DashboardClient() {
               placeholder="子项目名称"
               disabled={!selectedProjectId}
             />
-            <button
-              type="button"
-              className="primary-button"
-              onClick={() => void createClient()}
-              disabled={busy}
-            >
+            <button type="button" className="primary-button" onClick={() => void createClient()} disabled={busy}>
               <Plus size={18} />
               新建子项目
             </button>
@@ -828,7 +795,6 @@ export function DashboardClient() {
                 </div>
                 <div className="client-row-meta">
                   <span className="status mode">{displayStatus(client.status)}</span>
-                  <ArrowRight size={16} />
                 </div>
                 <button
                   type="button"
@@ -852,14 +818,14 @@ export function DashboardClient() {
               </div>
             ))}
             {!loading && selectedProjectId && data.clients.length === 0 ? <p className="empty">当前项目暂无子项目</p> : null}
-            {!loading && !selectedProjectId ? <p className="empty">请先选择或创建项目</p> : null}
+            {!loading && !selectedProjectId ? <p className="empty">请先选择项目</p> : null}
           </div>
         </section>
 
         <section className="panel detail-panel">
           <div className="panel-title split">
             <div>
-              <p className="eyebrow">当前子项目</p>
+              <p className="eyebrow">工作状态</p>
               <h2>{selectedClient?.name ?? "未选择子项目"}</h2>
             </div>
             {selectedClient ? <span className="status mode">{displayStatus(selectedClient.status)}</span> : null}
@@ -867,20 +833,20 @@ export function DashboardClient() {
 
           <div className="state-grid">
             <div>
-              <span>所属 SYSTEM</span>
-              <strong>{systemBrain.system_id}</strong>
-            </div>
-            <div>
-              <span>所属项目</span>
-              <strong>{(selectedProject?.name ?? selectedProjectId) || "-"}</strong>
+              <span>项目</span>
+              <strong>{selectedProject?.name ?? "-"}</strong>
             </div>
             <div>
               <span>子项目 ID</span>
               <strong>{selectedClient?.client_id ?? "-"}</strong>
             </div>
             <div>
-              <span>当前模式</span>
+              <span>模式</span>
               <strong>{displayStatus(statePack?.current_mode || selectedClient?.status)}</strong>
+            </div>
+            <div>
+              <span>任务数</span>
+              <strong>{clientTasks.length}</strong>
             </div>
             <div className="wide">
               <span>当前任务</span>
@@ -889,89 +855,82 @@ export function DashboardClient() {
           </div>
 
           <div className="actions">
-            <button type="button" className="primary-button" onClick={executeTask} disabled={!selectedClient || busy}>
-              <Play size={17} />
-              执行任务
+            <button
+              type="button"
+              className="primary-button"
+              onClick={() => void loadContextPack()}
+              disabled={!selectedClient || busy || contextLoading}
+            >
+              <Activity size={17} />
+              {contextLoading ? "加载中" : "接管"}
             </button>
-            <button type="button" className="secondary-button" onClick={copyHandoverContext} disabled={!selectedClient}>
+            <button type="button" className="secondary-button" onClick={() => void copyContextPack()} disabled={!contextPack}>
               <Copy size={17} />
-              复制接管
+              复制接管包
             </button>
-            <a className="secondary-button" href={handoverLink || "#"}>
-              <ExternalLink size={17} />
-              打开
-            </a>
-          </div>
-
-          <form className="task-form" onSubmit={createTask}>
-            <input
-              aria-label="任务动作"
-              value={taskAction}
-              onChange={(event) => setTaskAction(event.target.value)}
-              placeholder="任务动作"
-            />
-            <button type="submit" className="icon-button dark" disabled={!selectedClient || busy || !taskAction.trim()}>
-              <Plus size={18} />
-            </button>
-          </form>
-
-          <div className="handover-strip">
-            <Link2 size={17} />
-            <span>{handoverLink || "暂无接管链接"}</span>
           </div>
         </section>
       </section>
 
-      <div className="hierarchy-arrow">↓</div>
-
-      <section className="bottom-grid">
-        <section className="panel">
+      <section className="handover-grid" aria-label="接管结果">
+        <section className="panel context-card">
           <div className="panel-title">
             <CheckCircle2 size={18} />
-            <h2>任务队列</h2>
+            <h2>STATE</h2>
           </div>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>任务</th>
-                  <th>状态</th>
-                  <th>创建时间</th>
-                </tr>
-              </thead>
-              <tbody>
-                {clientTasks.map((task: TaskQueueItem) => (
-                  <tr key={task.task_id}>
-                    <td>{task.action}</td>
-                    <td>
-                      <span className={statusClass(task.status)}>{displayStatus(task.status)}</span>
-                    </td>
-                    <td>{formatDate(task.created_at)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {!loading && clientTasks.length === 0 ? <p className="empty">当前子项目暂无任务</p> : null}
+          <div className="state-grid compact-state-grid">
+            <div>
+              <span>client_id</span>
+              <strong>{textValue(packState.client_id, selectedClient?.client_id ?? "-")}</strong>
+            </div>
+            <div>
+              <span>project_id</span>
+              <strong>{textValue(packState.project_id, selectedProjectId || "-")}</strong>
+            </div>
+            <div>
+              <span>status</span>
+              <strong>{displayStatus(textValue(packState.status, selectedClient?.status ?? "-"))}</strong>
+            </div>
+            <div>
+              <span>current_task</span>
+              <strong>{textValue(packState.current_task, selectedClient?.current_task || "空闲")}</strong>
+            </div>
           </div>
         </section>
 
-        <section className="panel">
+        <section className="panel context-card">
           <div className="panel-title">
-            <Activity size={18} />
-            <h2>事件流</h2>
+            <Database size={18} />
+            <h2>TASK</h2>
           </div>
-          <div className="event-list">
-            {clientEvents.map((event: EventStreamItem) => (
-              <div className="event-row" key={event.event_id}>
-                <div>
-                  <strong>{event.type}</strong>
-                  <span>{formatDate(event.timestamp)}</span>
-                </div>
-                <code>{JSON.stringify(event.output)}</code>
+          <div className="context-list">
+            {packTasks.map((task) => (
+              <div className="compact-row" key={task.task_id}>
+                <span>{task.action}</span>
+                <span className={statusClass(task.status)}>{displayStatus(task.status)}</span>
               </div>
             ))}
-            {!loading && clientEvents.length === 0 ? <p className="empty">当前子项目暂无事件</p> : null}
+            {!loading && packTasks.length === 0 ? <p className="empty">暂无任务</p> : null}
           </div>
+        </section>
+
+        <section className="panel context-card">
+          <div className="panel-title">
+            <Layers3 size={18} />
+            <h2>MEMORY</h2>
+          </div>
+          <div className="context-summary">
+            <p>{memorySummary}</p>
+            {contextPack?.created_at ? <span>{formatDate(contextPack.created_at)}</span> : null}
+          </div>
+        </section>
+
+        <section className="panel context-card">
+          <div className="panel-title">
+            <Activity size={18} />
+            <h2>NEXT STEP</h2>
+          </div>
+          <div className="next-step-box">{nextStep}</div>
         </section>
       </section>
     </main>
