@@ -266,6 +266,13 @@ h2 {
   padding: 12px;
 }
 
+.project-row,
+.client-row {
+  position: relative;
+  overflow: visible;
+  padding-right: 108px;
+}
+
 .project-button {
   width: 100%;
   cursor: pointer;
@@ -276,6 +283,7 @@ h2 {
 .row-content {
   min-width: 0;
   flex: 1;
+  max-width: 100%;
 }
 
 .project-button.active {
@@ -302,6 +310,11 @@ h2 {
 }
 
 .row-delete-button {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  z-index: 20;
+  transform: translateY(-50%);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -315,6 +328,15 @@ h2 {
   color: var(--red);
   cursor: pointer;
   flex: 0 0 auto;
+  pointer-events: auto;
+}
+
+.row-delete-button:hover,
+.row-delete-button:focus-visible {
+  border-color: #cf6f65;
+  background: #ffe5e1;
+  box-shadow: 0 0 0 3px rgba(138, 47, 40, 0.12);
+  outline: none;
 }
 
 .row-delete-button:disabled {
