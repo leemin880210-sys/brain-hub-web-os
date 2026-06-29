@@ -318,8 +318,8 @@
             <h2>📦 PROJECT LIST</h2>
           </div>
           <form id="create-project-form" class="forms">
-            <input id="project-name" aria-label="项目名称" placeholder="项目名称" autocomplete="off" required />
-            <button class="primary" type="submit">新建项目</button>
+            <input id="project-name" aria-label="项目名称" placeholder="项目名称" autocomplete="off" />
+            <button id="create-project" class="primary" type="button">新建项目</button>
           </form>
           <div id="projects" class="stack"></div>
         </section>
@@ -333,8 +333,8 @@
             <span id="selected-project-badge" class="badge">未选择项目</span>
           </div>
           <form id="create-client-form" class="forms">
-            <input id="client-name" aria-label="副脑名称" placeholder="副脑名称" autocomplete="off" required disabled />
-            <button id="create-client" class="primary" type="submit" disabled>新建副脑</button>
+            <input id="client-name" aria-label="子项目名称" placeholder="子项目名称（副脑）" autocomplete="off" disabled />
+            <button id="create-client" class="primary" type="button">新建子项目</button>
           </form>
           <div id="clients" class="stack"></div>
         </section>
@@ -605,7 +605,7 @@
       }
 
       async function createProject(event) {
-        event.preventDefault();
+        event?.preventDefault?.();
         const projectName = el("project-name").value.trim();
 
         if (!projectName) {
@@ -628,7 +628,7 @@
       }
 
       async function createClient(event) {
-        event.preventDefault();
+        event?.preventDefault?.();
         const clientName = el("client-name").value.trim();
 
         if (!state.selectedProjectId) {
@@ -637,7 +637,7 @@
         }
 
         if (!clientName) {
-          notice("请填写副脑名称");
+          notice("请填写子项目名称（副脑）");
           return;
         }
 
@@ -652,7 +652,7 @@
           });
           el("client-name").value = "";
           await loadDashboard(state.selectedProjectId, result.client?.client_id || "");
-          notice("副脑已创建");
+          notice("子项目已创建");
         } catch {
           notice("外脑连接中...");
         }
@@ -695,7 +695,7 @@
         });
 
         el("client-name").disabled = !state.selectedProjectId;
-        el("create-client").disabled = !state.selectedProjectId;
+        el("create-client").disabled = false;
         el("clients").innerHTML =
           state.clients
             .map((clientItem) => {
@@ -795,8 +795,16 @@ AI 执行规则:
         void loadDashboard();
       });
 
+      el("create-project").addEventListener("click", () => {
+        void createProject();
+      });
+
       el("create-project-form").addEventListener("submit", (event) => {
         void createProject(event);
+      });
+
+      el("create-client").addEventListener("click", () => {
+        void createClient();
       });
 
       el("create-client-form").addEventListener("submit", (event) => {
