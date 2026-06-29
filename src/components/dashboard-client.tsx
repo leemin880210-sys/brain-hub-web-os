@@ -105,7 +105,7 @@ const emptyCounts: CountPayload = {
 
 const defaultSystemBrain: SystemBrain = {
   system_id: "AI_MEMORY_SYSTEM",
-  name: "SYSTEM BRAIN",
+  name: "系统",
   mode: "cloud_brain_os",
   status: "connecting"
 };
@@ -401,7 +401,8 @@ export function DashboardClient() {
       const result = await fetchJson<CreateProjectResponse>("/api/project/create", {
         method: "POST",
         body: JSON.stringify({
-          project_name: nextProjectName
+          project_name: nextProjectName,
+          system_id: "brain_os"
         })
       });
       setProjectName("");
@@ -425,7 +426,7 @@ export function DashboardClient() {
     }
 
     if (!nextClientName) {
-      setNotice("请填写子项目名称（副脑）");
+      setNotice("请填写子项目名称");
       return;
     }
 
@@ -463,9 +464,9 @@ export function DashboardClient() {
     setNotice("");
     try {
       await loadClientContext(clientId);
-      setNotice(`已加载子脑：${clientId}`);
+      setNotice(`已加载子项目：${clientId}`);
     } catch {
-      setNotice("子脑加载失败");
+      setNotice("子项目加载失败");
     } finally {
       setBusy(false);
     }
@@ -547,7 +548,7 @@ export function DashboardClient() {
       <header className="topbar">
         <div>
           <p className="eyebrow">外脑 API 可视化控制台</p>
-          <h1>Brain Hub 外脑控制台</h1>
+          <h1>外脑控制台</h1>
         </div>
         <button
           className="icon-button"
@@ -579,7 +580,7 @@ export function DashboardClient() {
           detail={
             apiStatus.loading
               ? "连接中..."
-              : `来源=${apiStatus.source}；项目=${systemCounts.projects}；子脑=${systemCounts.clients}`
+              : `来源=${apiStatus.source}；项目=${systemCounts.projects}；子项目=${systemCounts.clients}`
           }
         />
         <Metric icon={<Server size={20} />} label="事件数" value={systemCounts.events} />
@@ -589,7 +590,7 @@ export function DashboardClient() {
         <div className="panel-title split">
           <div>
             <p className="eyebrow">SYSTEM</p>
-            <h2>🧠 SYSTEM BRAIN</h2>
+            <h2>系统</h2>
           </div>
           <span className="status mode">{displayStatus(systemBrain.status)}</span>
         </div>
@@ -603,11 +604,11 @@ export function DashboardClient() {
             <strong>{displayStatus(systemBrain.mode)}</strong>
           </div>
           <div>
-            <span>PROJECT 总数</span>
+            <span>项目总数</span>
             <strong>{systemCounts.projects}</strong>
           </div>
           <div>
-            <span>CLIENT 总数</span>
+            <span>子项目总数</span>
             <strong>{systemCounts.clients}</strong>
           </div>
         </div>
@@ -617,7 +618,7 @@ export function DashboardClient() {
 
       <section className="metric-grid" aria-label="当前层级数据">
         <Metric icon={<Layers3 size={20} />} label="当前项目数" value={data.projects.length} />
-        <Metric icon={<Users2 size={20} />} label="当前项目子脑" value={data.clients.length} />
+        <Metric icon={<Users2 size={20} />} label="当前项目子项目" value={data.clients.length} />
         <Metric icon={<Clock3 size={20} />} label="当前待处理" value={pendingCount} />
         <Metric icon={<Activity size={20} />} label="当前执行中" value={runningCount} />
       </section>
@@ -626,7 +627,7 @@ export function DashboardClient() {
         <section className="panel">
           <div className="panel-title">
             <Database size={18} />
-            <h2>📦 PROJECT LIST</h2>
+            <h2>项目列表</h2>
           </div>
 
           <form
@@ -670,8 +671,8 @@ export function DashboardClient() {
         <section className="panel clients-panel">
           <div className="panel-title split">
             <div>
-              <p className="eyebrow">归属于 PROJECT</p>
-              <h2>👤 CLIENT LIST</h2>
+              <p className="eyebrow">归属于项目</p>
+              <h2>子项目列表</h2>
             </div>
             <span className="status mode">{selectedProject?.project_id ?? "未选择项目"}</span>
           </div>
@@ -687,7 +688,7 @@ export function DashboardClient() {
               aria-label="子项目名称"
               value={clientName}
               onChange={(event) => setClientName(event.target.value)}
-              placeholder="子项目名称（副脑）"
+              placeholder="子项目名称"
               disabled={!selectedProjectId}
             />
             <button
@@ -719,7 +720,7 @@ export function DashboardClient() {
                 </div>
               </button>
             ))}
-            {!loading && selectedProjectId && data.clients.length === 0 ? <p className="empty">当前项目暂无子脑</p> : null}
+            {!loading && selectedProjectId && data.clients.length === 0 ? <p className="empty">当前项目暂无子项目</p> : null}
             {!loading && !selectedProjectId ? <p className="empty">请先选择或创建项目</p> : null}
           </div>
         </section>
@@ -727,8 +728,8 @@ export function DashboardClient() {
         <section className="panel detail-panel">
           <div className="panel-title split">
             <div>
-              <p className="eyebrow">当前 CLIENT</p>
-              <h2>{selectedClient?.name ?? "未选择子脑"}</h2>
+              <p className="eyebrow">当前子项目</p>
+              <h2>{selectedClient?.name ?? "未选择子项目"}</h2>
             </div>
             {selectedClient ? <span className="status mode">{displayStatus(selectedClient.status)}</span> : null}
           </div>
@@ -739,11 +740,11 @@ export function DashboardClient() {
               <strong>{systemBrain.system_id}</strong>
             </div>
             <div>
-              <span>所属 PROJECT</span>
+              <span>所属项目</span>
               <strong>{(selectedProject?.name ?? selectedProjectId) || "-"}</strong>
             </div>
             <div>
-              <span>CLIENT ID</span>
+              <span>子项目 ID</span>
               <strong>{selectedClient?.client_id ?? "-"}</strong>
             </div>
             <div>
@@ -819,7 +820,7 @@ export function DashboardClient() {
                 ))}
               </tbody>
             </table>
-            {!loading && clientTasks.length === 0 ? <p className="empty">当前子脑暂无任务</p> : null}
+            {!loading && clientTasks.length === 0 ? <p className="empty">当前子项目暂无任务</p> : null}
           </div>
         </section>
 
@@ -838,7 +839,7 @@ export function DashboardClient() {
                 <code>{JSON.stringify(event.output)}</code>
               </div>
             ))}
-            {!loading && clientEvents.length === 0 ? <p className="empty">当前子脑暂无事件</p> : null}
+            {!loading && clientEvents.length === 0 ? <p className="empty">当前子项目暂无事件</p> : null}
           </div>
         </section>
       </section>
