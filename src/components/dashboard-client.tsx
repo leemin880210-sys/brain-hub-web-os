@@ -276,6 +276,7 @@ export function DashboardClient() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
+  const [noticeTone, setNoticeTone] = useState<"info" | "success" | "error">("info");
   const [origin, setOrigin] = useState("");
 
   const loadClientContext = useCallback(async (clientId: string) => {
@@ -302,6 +303,7 @@ export function DashboardClient() {
     async (projectOverride?: string, clientOverride?: string) => {
       setLoading(true);
       setNotice("");
+      setNoticeTone("info");
 
       const [systemPayload, healthPayload, projectsPayload, eventsPayload] = await Promise.all([
         tryFetchJson<SystemPayload>("/api/system"),
@@ -439,24 +441,40 @@ export function DashboardClient() {
   }
 
   async function deleteProject(projectId: string) {
-    if (!projectId) return;
+    if (!projectId) {
+      setNoticeTone("error");
+      setNotice("缺少项目 ID，无法删除");
+      return;
+    }
 
     setBusy(true);
+    setNoticeTone("info");
     setNotice("正在删除项目...");
     try {
-      await fetchJson<DeleteProjectResponse>("/api/project/delete", {
+      const result = await fetchJson<DeleteProjectResponse>("/api/project/delete", {
         method: "POST",
         body: JSON.stringify({
           project_id: projectId
         })
       });
 
+      if (!result.deleted) {
+        throw new Error("项目删除失败：接口未确认删除");
+      }
+
+      setData((current) => ({
+        ...current,
+        projects: current.projects.filter((project) => project.project_id !== projectId),
+        clients: []
+      }));
       setSelectedProjectId("");
       setSelectedClientId("");
       setStatePack(null);
-      setNotice("项目已删除");
       await load("", "");
+      setNoticeTone("success");
+      setNotice("项目已删除，列表已刷新");
     } catch (error) {
+      setNoticeTone("error");
       setNotice(error instanceof Error ? error.message : "项目删除失败");
     } finally {
       setBusy(false);
@@ -497,9 +515,14 @@ export function DashboardClient() {
   }
 
   async function deleteClient(clientId: string) {
-    if (!clientId) return;
+    if (!clientId) {
+      setNoticeTone("error");
+      setNotice("缺少子项目 ID，无法删除");
+      return;
+    }
 
     setBusy(true);
+    setNoticeTone("info");
     setNotice("正在删除子项目...");
     try {
       const result = await fetchJson<DeleteClientResponse>("/api/client/delete", {
@@ -509,12 +532,22 @@ export function DashboardClient() {
         })
       });
 
+      if (!result.deleted) {
+        throw new Error("子项目删除失败：接口未确认删除");
+      }
+
       const nextProjectId = result.project_id || selectedProjectId;
+      setData((current) => ({
+        ...current,
+        clients: current.clients.filter((client) => client.client_id !== clientId)
+      }));
       setSelectedClientId("");
       setStatePack(null);
-      setNotice("子项目已删除");
       await load(nextProjectId, "");
+      setNoticeTone("success");
+      setNotice("子项目已删除，列表已刷新");
     } catch (error) {
+      setNoticeTone("error");
       setNotice(error instanceof Error ? error.message : "子项目删除失败");
     } finally {
       setBusy(false);
@@ -632,7 +665,7 @@ export function DashboardClient() {
         </button>
       </header>
 
-      {notice ? <div className={apiStatus.apiConnected ? "notice" : "notice error"}>{notice}</div> : null}
+      {notice ? <div className={noticeTone === "error" ? "notice error" : noticeTone === "success" ? "notice success" : "notice"}>{notice}</div> : null}
 
       <section className="metric-grid" aria-label="API 状态">
         <StatusBadge
@@ -735,7 +768,13 @@ export function DashboardClient() {
                 <button
                   type="button"
                   className="row-delete-button"
+                  title="删除项目"
+                  data-action="delete-project"
+                  onPointerDown={(event) => {
+                    event.stopPropagation();
+                  }}
                   onClick={(event) => {
+                    event.preventDefault();
                     event.stopPropagation();
                     void deleteProject(project.project_id);
                   }}
@@ -743,6 +782,7 @@ export function DashboardClient() {
                   aria-label="删除项目"
                 >
                   <Trash2 size={16} />
+                  <span>删除</span>
                 </button>
               </div>
             ))}
@@ -802,7 +842,13 @@ export function DashboardClient() {
                 <button
                   type="button"
                   className="row-delete-button"
+                  title="删除子项目"
+                  data-action="delete-client"
+                  onPointerDown={(event) => {
+                    event.stopPropagation();
+                  }}
                   onClick={(event) => {
+                    event.preventDefault();
                     event.stopPropagation();
                     void deleteClient(client.client_id);
                   }}
@@ -810,6 +856,7 @@ export function DashboardClient() {
                   aria-label="删除子项目"
                 >
                   <Trash2 size={16} />
+                  <span>删除</span>
                 </button>
               </div>
             ))}
