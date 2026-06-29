@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Brain Hub 外脑控制台</title>
+    <title>外脑控制台</title>
     <style>
       :root {
         --bg: #f7f8f3;
@@ -261,7 +261,7 @@
       <header>
         <div>
           <div class="muted">外脑 API 可视化控制台</div>
-          <h1>Brain Hub 外脑控制台</h1>
+          <h1>外脑控制台</h1>
         </div>
         <div class="actions">
           <button id="refresh" class="primary">刷新云端状态</button>
@@ -279,7 +279,7 @@
         <div class="panel-title split">
           <div>
             <div class="eyebrow">SYSTEM</div>
-            <h2>🧠 SYSTEM BRAIN</h2>
+            <h2>系统</h2>
           </div>
           <span id="system-status" class="badge">连接中</span>
         </div>
@@ -293,11 +293,11 @@
             <strong id="system-mode">云端外脑系统</strong>
           </div>
           <div>
-            <span>PROJECT 总数</span>
+            <span>项目总数</span>
             <strong id="system-project-count">0</strong>
           </div>
           <div>
-            <span>CLIENT 总数</span>
+            <span>子项目总数</span>
             <strong id="system-client-count">0</strong>
           </div>
         </div>
@@ -307,7 +307,7 @@
 
       <section class="metrics">
         <div class="metric"><span>项目数</span><strong id="project-count">0</strong></div>
-        <div class="metric"><span>当前项目子脑</span><strong id="client-count">0</strong></div>
+        <div class="metric"><span>当前项目子项目</span><strong id="client-count">0</strong></div>
         <div class="metric"><span>当前任务</span><strong id="task-count">0</strong></div>
         <div class="metric"><span>事件流</span><strong id="event-count">0</strong></div>
       </section>
@@ -315,7 +315,7 @@
       <section class="grid">
         <section class="panel">
           <div class="panel-title">
-            <h2>📦 PROJECT LIST</h2>
+            <h2>项目列表</h2>
           </div>
           <form id="create-project-form" class="forms">
             <input id="project-name" aria-label="项目名称" placeholder="项目名称" autocomplete="off" />
@@ -327,13 +327,13 @@
         <section class="panel">
           <div class="panel-title split">
             <div>
-              <div class="eyebrow">归属于 PROJECT</div>
-              <h2>👤 CLIENT LIST</h2>
+              <div class="eyebrow">归属于项目</div>
+              <h2>子项目列表</h2>
             </div>
             <span id="selected-project-badge" class="badge">未选择项目</span>
           </div>
           <form id="create-client-form" class="forms">
-            <input id="client-name" aria-label="子项目名称" placeholder="子项目名称（副脑）" autocomplete="off" disabled />
+            <input id="client-name" aria-label="子项目名称" placeholder="子项目名称" autocomplete="off" disabled />
             <button id="create-client" class="primary" type="button">新建子项目</button>
           </form>
           <div id="clients" class="stack"></div>
@@ -341,7 +341,7 @@
 
         <section class="panel">
           <div class="panel-title split">
-            <h2>当前 CLIENT</h2>
+            <h2>当前子项目</h2>
             <span id="client-status" class="badge">未连接</span>
           </div>
           <div class="stack">
@@ -350,18 +350,18 @@
               <strong id="current-system">AI_MEMORY_SYSTEM</strong>
             </div>
             <div class="item">
-              <span>所属 PROJECT</span>
+              <span>所属项目</span>
               <strong id="current-project">-</strong>
             </div>
             <div class="item">
-              <span>当前子脑</span>
+              <span>当前子项目</span>
               <strong id="current-client">-</strong>
             </div>
             <div class="item">
               <span>当前任务</span>
               <strong id="current-task">-</strong>
             </div>
-            <pre id="handover">请先选择项目，再选择子脑。</pre>
+            <pre id="handover">请先选择项目，再选择子项目。</pre>
           </div>
         </section>
       </section>
@@ -392,7 +392,7 @@
 
       const defaultSystem = {
         system_id: "AI_MEMORY_SYSTEM",
-        name: "SYSTEM BRAIN",
+        name: "系统",
         mode: "cloud_brain_os",
         status: "connecting"
       };
@@ -594,7 +594,7 @@
           state.eventStream = state.selectedStatePack.event_stream;
 
           render();
-          if (showNotice) notice(`已加载子脑：${clientId}`);
+          if (showNotice) notice(`已加载子项目：${clientId}`);
         } catch {
           state.taskQueue = [];
           notice("外脑连接中...");
@@ -637,7 +637,7 @@
         }
 
         if (!clientName) {
-          notice("请填写子项目名称（副脑）");
+          notice("请填写子项目名称");
           return;
         }
 
@@ -707,7 +707,7 @@
               )}</span></button>`;
             })
             .join("") ||
-          `<div class="item"><span>${state.selectedProjectId ? "当前项目暂无子脑" : "请先选择或创建项目"}</span></div>`;
+          `<div class="item"><span>${state.selectedProjectId ? "当前项目暂无子项目" : "请先选择或创建项目"}</span></div>`;
 
         document.querySelectorAll("[data-client]").forEach((button) => {
           button.addEventListener("click", () => {
@@ -724,7 +724,7 @@
           state.selectedStatePack?.current_mode ||
           client?.status ||
           "未连接";
-        el("handover").textContent = client ? buildHandoverText(project, client, tasks, events) : "请先选择项目，再选择子脑。";
+        el("handover").textContent = client ? buildHandoverText(project, client, tasks, events) : "请先选择项目，再选择子项目。";
 
         el("tasks").innerHTML =
           tasks
@@ -735,7 +735,7 @@
                 statusText[task.status] || task.status || "-"
               )}</span></div>`
             )
-            .join("") || `<div class="item"><span>当前子脑暂无任务</span></div>`;
+            .join("") || `<div class="item"><span>当前子项目暂无任务</span></div>`;
 
         el("events").innerHTML =
           events
@@ -744,12 +744,12 @@
                 event.timestamp ? new Date(event.timestamp).toLocaleString() : "-"
               )}</span></div>`
             )
-            .join("") || `<div class="item"><span>当前子脑暂无事件</span></div>`;
+            .join("") || `<div class="item"><span>当前子项目暂无事件</span></div>`;
       }
 
       function buildHandoverText(project, client, tasks, events) {
         const statePack = state.selectedStatePack || {};
-        return `# Brain Hub 外脑接管上下文
+        return `# 外脑接管上下文
 
 system_id = ${state.system.system_id || "AI_MEMORY_SYSTEM"}
 project_id = ${client.project_id || project?.project_id || ""}
