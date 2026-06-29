@@ -261,6 +261,11 @@ h2 {
   text-align: left;
 }
 
+.row-content {
+  min-width: 0;
+  flex: 1;
+}
+
 .project-button.active {
   border-color: var(--green);
   background: #edf7f0;
@@ -282,6 +287,25 @@ h2 {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.row-delete-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid #e2aaa4;
+  border-radius: 8px;
+  background: #fff7f6;
+  color: var(--red);
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+.row-delete-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .status {
