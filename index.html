@@ -186,8 +186,10 @@
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        width: 36px;
+        gap: 6px;
+        min-width: 72px;
         min-height: 36px;
+        padding: 0 10px;
         border-color: #e2aaa4;
         background: #fff7f6;
         color: var(--red);
@@ -708,10 +710,13 @@
         notice("正在删除项目...");
         render();
         try {
-          await api("/project/delete", {
+          const result = await api("/project/delete", {
             method: "POST",
             body: JSON.stringify({ project_id: projectId })
           });
+          if (!result.deleted) {
+            throw new Error("项目删除失败：接口未确认删除");
+          }
           state.selectedProjectId = "";
           state.selectedClientId = "";
           state.selectedStatePack = null;
@@ -738,6 +743,9 @@
             method: "POST",
             body: JSON.stringify({ client_id: clientId })
           });
+          if (!result.deleted) {
+            throw new Error("子项目删除失败：接口未确认删除");
+          }
           const nextProjectId = result.project_id || state.selectedProjectId;
           state.selectedClientId = "";
           state.selectedStatePack = null;
@@ -786,7 +794,7 @@
                 projectId || "-"
               )}</span></div><button class="row-delete-button" data-delete-project="${escapeHtml(
                 projectId
-              )}" type="button" ${state.busy ? "disabled" : ""}>删除</button></div>`;
+              )}" type="button" title="删除项目" data-action="delete-project" ${state.busy ? "disabled" : ""}>删除</button></div>`;
             })
             .join("") || `<div class="item"><span>暂无项目，请先新建项目</span></div>`;
 
@@ -798,7 +806,11 @@
         });
 
         document.querySelectorAll("[data-delete-project]").forEach((button) => {
+          button.addEventListener("pointerdown", (event) => {
+            event.stopPropagation();
+          });
           button.addEventListener("click", (event) => {
+            event.preventDefault();
             event.stopPropagation();
             void deleteProject(button.dataset.deleteProject);
           });
@@ -818,7 +830,7 @@
                 clientId || "-"
               )}</span></div><button class="row-delete-button" data-delete-client="${escapeHtml(
                 clientId
-              )}" type="button" ${state.busy ? "disabled" : ""}>删除</button></div>`;
+              )}" type="button" title="删除子项目" data-action="delete-client" ${state.busy ? "disabled" : ""}>删除</button></div>`;
             })
             .join("") ||
           `<div class="item"><span>${state.selectedProjectId ? "当前项目暂无子项目" : "请先选择或创建项目"}</span></div>`;
@@ -831,7 +843,11 @@
         });
 
         document.querySelectorAll("[data-delete-client]").forEach((button) => {
+          button.addEventListener("pointerdown", (event) => {
+            event.stopPropagation();
+          });
           button.addEventListener("click", (event) => {
+            event.preventDefault();
             event.stopPropagation();
             void deleteClient(button.dataset.deleteClient);
           });
