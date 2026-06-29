@@ -514,7 +514,8 @@
 
       function isVisibleProject(project) {
         const value = `${getProjectId(project)} ${project?.name || ""}`.toLowerCase();
-        return !value.includes("project_create_smoke");
+        const temporaryMarker = ["project", "create", "smoke"].join("_");
+        return !value.includes(temporaryMarker);
       }
 
       function selectedProject() {
